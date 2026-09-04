@@ -134,6 +134,7 @@ jobs:
           body: |
             ## Pulse-DS v${{ steps.version.outputs.version }}
             Dedicated-server monitoring: hardware inventory (processor, DIMMs, disks with SMART, RAID, NICs, GPUs, sensors, BMC/IPMI), server-side health evaluation, live metrics and TCPing. Setup and security notes are in the README.
+            Defaults are chosen so Pulse-DS can share a host with Pulse: port 8018, `/opt/pulse-ds`, services `pulse-ds-server` and `pulse-ds-client`.
             ### Docker Images
             - `xhh1128/pulse-ds:${{ steps.version.outputs.version }}`
             - `xhh1128/pulse-ds:latest`
@@ -150,7 +151,7 @@ jobs:
             ### Quick Install
             Server (systemd):
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/install-pulse-server.sh | sudo bash
+            curl -fsSL https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/install-pulse-ds-server.sh | sudo bash
             ```
             Client (Linux & macOS; add the system in `/admin` first to get its ID and secret):
             ```bash

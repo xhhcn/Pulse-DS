@@ -12,8 +12,8 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-INSTALL_DIR="/opt/pulse"
-SERVICE_NAME="pulse-server"
+INSTALL_DIR="/opt/pulse-ds"
+SERVICE_NAME="pulse-ds-server"
 GITHUB_REPO="xhhcn/Pulse-DS"
 VERSION="latest"  # Can be changed to specific version like "v1.2.3"
 
@@ -64,13 +64,13 @@ else
     DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$VERSION/$BINARY_NAME"
 fi
 
-if ! wget -q --show-progress "$DOWNLOAD_URL" -O "$INSTALL_DIR/pulse-server"; then
+if ! wget -q --show-progress "$DOWNLOAD_URL" -O "$INSTALL_DIR/pulse-ds-server"; then
     print_message "$RED" "❌ Failed to download binary"
     print_message "$YELLOW" "   URL: $DOWNLOAD_URL"
     exit 1
 fi
 
-chmod +x "$INSTALL_DIR/pulse-server"
+chmod +x "$INSTALL_DIR/pulse-ds-server"
 print_message "$GREEN" "✅ Binary downloaded and made executable"
 
 # Drop the migration helper scripts (backup / restore / migrate) into
@@ -96,11 +96,11 @@ for s in backup.sh restore.sh migrate.sh; do
     chmod +x "$INSTALL_DIR/scripts/$s"
 done
 if $SCRIPTS_OK; then
-    ln -sf "$INSTALL_DIR/scripts/migrate.sh" /usr/local/bin/pulse-migrate
-    ln -sf "$INSTALL_DIR/scripts/backup.sh"  /usr/local/bin/pulse-backup
-    ln -sf "$INSTALL_DIR/scripts/restore.sh" /usr/local/bin/pulse-restore
+    ln -sf "$INSTALL_DIR/scripts/migrate.sh" /usr/local/bin/pulse-ds-migrate
+    ln -sf "$INSTALL_DIR/scripts/backup.sh"  /usr/local/bin/pulse-ds-backup
+    ln -sf "$INSTALL_DIR/scripts/restore.sh" /usr/local/bin/pulse-ds-restore
     print_message "$GREEN" "✅ Migration helpers installed to $INSTALL_DIR/scripts"
-    print_message "$GREEN" "   CLI shortcuts: pulse-migrate / pulse-backup / pulse-restore"
+    print_message "$GREEN" "   CLI shortcuts: pulse-ds-migrate / pulse-ds-backup / pulse-ds-restore"
 else
     rm -f "$INSTALL_DIR/scripts/backup.sh" "$INSTALL_DIR/scripts/restore.sh" "$INSTALL_DIR/scripts/migrate.sh"
     print_message "$YELLOW" "⚠️  Could not fetch migration helpers (non-fatal) — rerun installer later."
@@ -110,17 +110,17 @@ fi
 print_message "$YELLOW" "⚙️  Creating systemd service..."
 cat > /etc/systemd/system/$SERVICE_NAME.service << EOF
 [Unit]
-Description=Pulse Server Monitor (Standalone)
+Description=Pulse-DS Server (Standalone)
 After=network.target
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/pulse-server
+ExecStart=$INSTALL_DIR/pulse-ds-server
 Restart=always
 RestartSec=5
-Environment="PORT=8008"
+Environment="PORT=8018"
 # Serve HTTPS directly (also enables HSTS). Prefer this or a TLS-terminating
 # reverse proxy: agents push hardware inventories and secrets over this link.
 #Environment="TLS_CERT=/etc/pulse/fullchain.pem"
@@ -128,7 +128,7 @@ Environment="PORT=8008"
 # Log to systemd journal (auto-managed)
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=pulse-server
+SyslogIdentifier=pulse-ds-server
 
 [Install]
 WantedBy=multi-user.target
@@ -158,8 +158,8 @@ if systemctl is-active --quiet $SERVICE_NAME; then
     print_message "$GREEN" "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     print_message "$YELLOW" "📍 Access your dashboard:"
-    print_message "$GREEN" "   http://$SERVER_IP:8008"
-    print_message "$GREEN" "   http://localhost:8008 (if local)"
+    print_message "$GREEN" "   http://$SERVER_IP:8018"
+    print_message "$GREEN" "   http://localhost:8018 (if local)"
     echo ""
     print_message "$YELLOW" "🔧 Useful commands:"
     print_message "$GREEN" "   sudo systemctl status $SERVICE_NAME   # Check status"
@@ -173,12 +173,12 @@ if systemctl is-active --quiet $SERVICE_NAME; then
     print_message "$YELLOW" "🔒 HTTPS: set TLS_CERT / TLS_KEY in /etc/systemd/system/$SERVICE_NAME.service (or terminate TLS at a reverse proxy)"
     echo ""
     print_message "$YELLOW" "🔄 Migrate from another Pulse server (zero downtime):"
-    print_message "$GREEN" "   sudo pulse-migrate --from https://OLD_HOST:8008"
+    print_message "$GREEN" "   sudo pulse-ds-migrate --from https://OLD_HOST:8008"
     echo ""
     print_message "$YELLOW" "🗑️  Uninstall:"
     print_message "$GREEN" "   sudo systemctl stop $SERVICE_NAME && sudo systemctl disable $SERVICE_NAME"
-    print_message "$GREEN" "   sudo rm -f $INSTALL_DIR/pulse-server /etc/systemd/system/$SERVICE_NAME.service"
-    print_message "$GREEN" "   sudo rm -f /usr/local/bin/pulse-migrate /usr/local/bin/pulse-backup /usr/local/bin/pulse-restore"
+    print_message "$GREEN" "   sudo rm -f $INSTALL_DIR/pulse-ds-server /etc/systemd/system/$SERVICE_NAME.service"
+    print_message "$GREEN" "   sudo rm -f /usr/local/bin/pulse-ds-migrate /usr/local/bin/pulse-ds-backup /usr/local/bin/pulse-ds-restore"
     print_message "$GREEN" "   sudo rm -rf $INSTALL_DIR/scripts $INSTALL_DIR/data && sudo systemctl daemon-reload"
     echo ""
     print_message "$GREEN" "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

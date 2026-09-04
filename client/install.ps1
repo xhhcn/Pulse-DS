@@ -41,8 +41,8 @@ $script:Secret = $env:Secret
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 # Configuration
-$InstallDir = "$env:ProgramFiles\Pulse"
-$ServiceName = "PulseClient"
+$InstallDir = "$env:ProgramFiles\Pulse-DS"
+$ServiceName = "PulseDSClient"
 $GitHubRepo = "https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/client"
 $BinaryName = "probe-client.exe"
 
@@ -171,7 +171,7 @@ function Add-FirewallRule {
     Write-Info "Configuring Windows Firewall..."
     
     $exePath = "$InstallDir\probe-client.exe"
-    $ruleName = "Pulse Monitoring Client"
+    $ruleName = "Pulse-DS Monitoring Client"
     
     try {
         # Remove existing rules if any
@@ -264,7 +264,7 @@ function New-ScheduledTaskService {
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
     
     # Register the task
-    Register-ScheduledTask -TaskName $ServiceName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Pulse Monitoring Client" | Out-Null
+    Register-ScheduledTask -TaskName $ServiceName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Pulse-DS Monitoring Client" | Out-Null
     
     Write-Success "Created scheduled task: $ServiceName"
     
@@ -322,7 +322,7 @@ function Show-Status {
     Write-Host "Uninstall:"
     Write-Host "  Stop-ScheduledTask -TaskName '$ServiceName' -ErrorAction SilentlyContinue"
     Write-Host "  Unregister-ScheduledTask -TaskName '$ServiceName' -Confirm:`$false -ErrorAction SilentlyContinue"
-    Write-Host "  Remove-NetFirewallRule -DisplayName 'Pulse Monitoring Client*' -ErrorAction SilentlyContinue"
+    Write-Host "  Remove-NetFirewallRule -DisplayName 'Pulse-DS Monitoring Client*' -ErrorAction SilentlyContinue"
     Write-Host "  Remove-Item -Recurse -Force '$InstallDir' -ErrorAction SilentlyContinue"
     Write-Host ""
 }

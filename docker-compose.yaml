@@ -1,11 +1,11 @@
 services:
   pulse:
     image: xhh1128/pulse-ds:latest
-    container_name: pulse-monitor
+    container_name: pulse-ds
     ports:
-      - 8008:8008
+      - 8018:8018
     volumes:
-      - pulse-data:/app/data
+      - pulse-ds-data:/app/data
     restart: unless-stopped
     # Bound container log growth: Docker's default json-file driver never
     # rotates, so a long-running deployment would slowly fill the disk.
@@ -19,5 +19,5 @@ services:
     # that plus slack so docker stop never SIGKILLs a half-written DB.
     stop_grace_period: 45s
 volumes:
-  pulse-data:
+  pulse-ds-data:
 

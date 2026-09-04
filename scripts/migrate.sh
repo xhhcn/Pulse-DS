@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# pulse-migrate -- one-shot migration from an old Pulse server to this host.
+# pulse-ds-migrate -- one-shot migration from an old Pulse server to this host.
 #
 # Run this on the NEW server, after you've installed Pulse on it (via
-# install-pulse-server.sh for the standalone binary, or `docker compose
+# install-pulse-ds-server.sh for the standalone binary, or `docker compose
 # up -d` for Docker). It:
 #
 #   1. Logs in to the OLD server with the admin password you supply
@@ -31,9 +31,9 @@
 #   --mode   MODE       docker | systemd | auto (default: auto)
 #   --compose-dir DIR   docker-compose dir for the NEW host (default: cwd)
 #   --data-dir    DIR   override target metrics.db directory
-#   --port   PORT       health-check port on the NEW host (default: 8008)
-#   --service NAME      systemd unit name (default: pulse-server)
-#   --install-dir DIR   standalone install dir (default: /opt/pulse)
+#   --port   PORT       health-check port on the NEW host (default: 8018)
+#   --service NAME      systemd unit name (default: pulse-ds-server)
+#   --install-dir DIR   standalone install dir (default: /opt/pulse-ds)
 #   --keep-backup FILE  keep the downloaded snapshot at this path
 #                       (default: delete after successful restore)
 #   -y, --yes           non-interactive, skip the confirmation prompt
@@ -55,13 +55,13 @@ MODE="auto"
 COMPOSE_DIR="."
 DATA_DIR=""
 PORT=""
-SERVICE_NAME="pulse-server"
-INSTALL_DIR="/opt/pulse"
+SERVICE_NAME="pulse-ds-server"
+INSTALL_DIR="/opt/pulse-ds"
 KEEP_BACKUP=""
 YES="false"
 
 # Resolve to the real script dir even when invoked through a symlink
-# (e.g. /usr/local/bin/pulse-migrate → /opt/pulse/scripts/migrate.sh),
+# (e.g. /usr/local/bin/pulse-ds-migrate → /opt/pulse-ds/scripts/migrate.sh),
 # because backup.sh and restore.sh live next to this script.
 resolve_script_dir() {
   local src="${BASH_SOURCE[0]}"
@@ -115,7 +115,7 @@ case "$FROM" in
     echo "    (including the password hash and every per-system secret) will cross" >&2
     echo "    the network unencrypted. Prefer https:// or an SSH tunnel, e.g.:" >&2
     echo "        ssh -fN -L 8008:localhost:8008 user@OLD_HOST" >&2
-    echo "        sudo $0 --from http://localhost:8008 ..." >&2
+    echo "        sudo $0 --from http://localhost:8018 ..." >&2
     if [[ "$YES" != "true" ]]; then
       read -r -p "    Continue anyway? [y/N] " ans
       case "$ans" in y|Y|yes|YES) ;; *) echo "aborted."; exit 0 ;; esac
@@ -137,7 +137,7 @@ cleanup_on_exit() {
 trap cleanup_on_exit EXIT
 
 # Self-bootstrap: migrate.sh normally ships alongside backup.sh and
-# restore.sh (installed by install-pulse-server.sh or cloned from the
+# restore.sh (installed by install-pulse-ds-server.sh or cloned from the
 # repo), but we also want a single-file experience for the Docker path
 # where users grab just migrate.sh with one curl. If the sidecars
 # aren't next to us, fetch them from the same branch of the repo into
@@ -146,7 +146,7 @@ trap cleanup_on_exit EXIT
 if [[ ! -x "$SCRIPT_DIR/backup.sh" || ! -x "$SCRIPT_DIR/restore.sh" ]]; then
   base="${PULSE_SCRIPT_BASE:-https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/scripts}"
   echo "→ helper scripts not found next to $0 — fetching from $base" >&2
-  boot="$(mktemp -d "${TMPDIR:-/tmp}/pulse-migrate-boot.XXXXXX")"
+  boot="$(mktemp -d "${TMPDIR:-/tmp}/pulse-ds-migrate-boot.XXXXXX")"
   chmod 700 "$boot"
   CLEANUP_DIRS+=( "$boot" )
   for s in backup.sh restore.sh; do
@@ -167,9 +167,9 @@ fi
 if [[ -n "$KEEP_BACKUP" ]]; then
   SNAPSHOT="$KEEP_BACKUP"
 else
-  tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/pulse-migrate.XXXXXX")"
+  tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/pulse-ds-migrate.XXXXXX")"
   chmod 700 "$tmpdir"
-  SNAPSHOT="$tmpdir/pulse-migrate.db"
+  SNAPSHOT="$tmpdir/pulse-ds-migrate.db"
   CLEANUP_DIRS+=( "$tmpdir" )
 fi
 
@@ -226,17 +226,17 @@ if ! "$SCRIPT_DIR/restore.sh" "${rargs[@]}"; then
   # the temp dir (which EXIT will delete) so the operator can investigate
   # or re-run the restore manually without repeating the network pull.
   rescue_dir="${HOME:-/root}"
-  rescue="$rescue_dir/pulse-migrate-rescue-$(date -u +%Y%m%dT%H%M%SZ).db"
+  rescue="$rescue_dir/pulse-ds-migrate-rescue-$(date -u +%Y%m%dT%H%M%SZ).db"
   echo "error: restore failed." >&2
   if ( umask 077 && cp "$SNAPSHOT" "$rescue" ) 2>/dev/null; then
     chmod 600 "$rescue" 2>/dev/null || true
     echo "       Snapshot preserved at: $rescue  (0600)" >&2
     echo "       To retry restore once you've fixed the cause:" >&2
-    echo "           sudo pulse-restore -y $rescue         # if pulse-restore is on PATH" >&2
+    echo "           sudo pulse-ds-restore -y $rescue         # if pulse-ds-restore is on PATH" >&2
     echo "           # or re-run this migrate command with --keep-backup $rescue" >&2
   else
     echo "       Could not save the snapshot out of the temp dir." >&2
-    echo "       Re-run with --keep-backup ./pulse-backup.db next time." >&2
+    echo "       Re-run with --keep-backup ./pulse-ds-backup.db next time." >&2
   fi
   exit 4
 fi
@@ -250,6 +250,6 @@ echo
 echo "  Next steps on each monitored client (only if the SERVER URL"
 echo "  actually changed — if you use DNS + a reverse proxy, nothing"
 echo "  needs updating):"
-echo "    sudo sed -i 's#$FROM##g' /etc/systemd/system/pulse-client.service  # remove old"
+echo "    sudo sed -i 's#$FROM##g' /etc/systemd/system/pulse-ds-client.service  # remove old"
 echo "    # then edit the Environment=... line to point at the new URL"
-echo "    sudo systemctl daemon-reload && sudo systemctl restart pulse-client"
+echo "    sudo systemctl daemon-reload && sudo systemctl restart pulse-ds-client"

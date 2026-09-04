@@ -9,6 +9,7 @@ Keeps the Pulse backend and data format, adds full hardware collection with heal
 - Docker image: `xhh1128/pulse-ds`
 - Data: an existing `metrics.db` works unchanged
 - Client: use the client from this repository (it collects hardware) on Linux / macOS / Windows; an upstream Pulse client still connects, but reports no hardware
+- Coexists with Pulse: defaults are port `8018`, `/opt/pulse-ds` and the services `pulse-ds-server` / `pulse-ds-client`, so nothing overlaps with Pulse's `8008` / `/opt/pulse` / `pulse-server` on the same host
 
 ## What is collected
 
@@ -21,13 +22,13 @@ Keeps the Pulse backend and data format, adds full hardware collection with heal
 ### Option 1: one-line install (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/install-pulse-server.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/install-pulse-ds-server.sh | sudo bash
 ```
 
 Then open:
 
 ```text
-http://YOUR_IP:8008
+http://YOUR_IP:8018
 ```
 
 ### Option 2: Docker Compose
@@ -38,18 +39,24 @@ curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/docker-compose.y
 docker compose up -d
 ```
 
-## Switching from Pulse without losing data
+## Migrating from Pulse
 
-Replace only the server binary and keep the data directory (use `arm64` instead of `amd64` on ARM):
+Pulse-DS installs under its own directory and service names and never touches an existing Pulse. Install Pulse-DS as above, then migrate the old data live (the old server may be on the same host):
 
 ```bash
-sudo systemctl stop pulse-server
-sudo wget https://github.com/xhhcn/Pulse-DS/releases/latest/download/pulse-server-standalone-linux-amd64 -O /opt/pulse/pulse-server
-sudo chmod +x /opt/pulse/pulse-server
-sudo systemctl start pulse-server
+sudo pulse-ds-migrate --from http://127.0.0.1:8008
 ```
 
-> This does not touch `/opt/pulse/data/metrics.db`. Reinstall the clients with the commands below to get hardware data.
+Stop the old Pulse afterwards and reinstall the clients with the commands below to get hardware data.
+
+**Updating Pulse-DS** (use `arm64` instead of `amd64` on ARM):
+
+```bash
+sudo systemctl stop pulse-ds-server
+sudo wget https://github.com/xhhcn/Pulse-DS/releases/latest/download/pulse-server-standalone-linux-amd64 -O /opt/pulse-ds/pulse-ds-server
+sudo chmod +x /opt/pulse-ds/pulse-ds-server
+sudo systemctl start pulse-ds-server
+```
 
 ## Client install
 
@@ -73,7 +80,7 @@ The client is push-only and opens no port by default. Optional tools: `smartmont
 ## Upgrading
 
 - Docker: pull the new image and recreate the container
-- Binary: download the latest `pulse-server-standalone-*` over `/opt/pulse/pulse-server`
+- Binary: download the latest `pulse-server-standalone-*` over `/opt/pulse-ds/pulse-ds-server`
 - Clients: self-update daily by default
 
 ## Uninstall
@@ -81,28 +88,28 @@ The client is push-only and opens no port by default. Optional tools: `smartmont
 ### Program only (keeps the data)
 
 ```bash
-sudo systemctl stop pulse-server && sudo systemctl disable pulse-server && \
-sudo rm -f /usr/local/bin/pulse-migrate /usr/local/bin/pulse-backup /usr/local/bin/pulse-restore && \
-sudo rm -f /opt/pulse/pulse-server /etc/systemd/system/pulse-server.service && \
-sudo rm -rf /opt/pulse/scripts && \
+sudo systemctl stop pulse-ds-server && sudo systemctl disable pulse-ds-server && \
+sudo rm -f /usr/local/bin/pulse-ds-migrate /usr/local/bin/pulse-ds-backup /usr/local/bin/pulse-ds-restore && \
+sudo rm -f /opt/pulse-ds/pulse-ds-server /etc/systemd/system/pulse-ds-server.service && \
+sudo rm -rf /opt/pulse-ds/scripts && \
 sudo systemctl daemon-reload
 ```
 
 ### Everything (deletes all data, irreversible)
 
 ```bash
-sudo systemctl stop pulse-server && sudo systemctl disable pulse-server && \
-sudo rm -f /usr/local/bin/pulse-migrate /usr/local/bin/pulse-backup /usr/local/bin/pulse-restore && \
-sudo rm -f /etc/systemd/system/pulse-server.service && \
-sudo rm -rf /opt/pulse && \
+sudo systemctl stop pulse-ds-server && sudo systemctl disable pulse-ds-server && \
+sudo rm -f /usr/local/bin/pulse-ds-migrate /usr/local/bin/pulse-ds-backup /usr/local/bin/pulse-ds-restore && \
+sudo rm -f /etc/systemd/system/pulse-ds-server.service && \
+sudo rm -rf /opt/pulse-ds && \
 sudo systemctl daemon-reload
 ```
 
 ## Production notes
 
-- **HTTPS**: hardware inventories, secrets and admin logins all travel over this link. Set `TLS_CERT` / `TLS_KEY` in `pulse-server.service` to serve HTTPS directly, or terminate TLS at a reverse proxy.
+- **HTTPS**: hardware inventories, secrets and admin logins all travel over this link. Set `TLS_CERT` / `TLS_KEY` in `pulse-ds-server.service` to serve HTTPS directly, or terminate TLS at a reverse proxy.
 - **Public dashboards**: the public view is masked; if the dashboard is reachable by anyone, also enable privacy mode to hide IPs and locations.
-- **A backup is a key ring**: `metrics.db` holds the admin password hash and every secret. Treat it as the production database; `pulse-backup` / `pulse-migrate` take hot backups and migrate.
+- **A backup is a key ring**: `metrics.db` holds the admin password hash and every secret. Treat it as the production database; `pulse-ds-backup` / `pulse-ds-migrate` take hot backups and migrate.
 - **Reverse proxy / CDN**: set `TRUSTED_PROXIES` (comma-separated IPs or CIDRs), otherwise login rate limits and SSE caps count per proxy address.
 - **Docker**: `docker-compose.yaml` sets a 45 s graceful stop; do not shorten it.
 

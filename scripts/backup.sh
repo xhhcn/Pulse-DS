@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pulse-backup -- grab a consistent snapshot of the Pulse bbolt database.
+# pulse-ds-backup -- grab a consistent snapshot of the Pulse bbolt database.
 #
 # Three modes:
 #
@@ -16,15 +16,15 @@
 #      volume, starts the container again. Used when you don't have
 #      an admin token handy. Requires local Docker access.
 #
-#   3) File mode (--mode systemd): stops the pulse-server systemd unit,
-#      copies /opt/pulse/data/metrics.db out, starts the service again.
+#   3) File mode (--mode systemd): stops the pulse-ds-server systemd unit,
+#      copies /opt/pulse-ds/data/metrics.db out, starts the service again.
 #      Used on standalone-binary installs.
 #
 # Environment / flags:
-#   SERVER_URL=http://HOST:PORT   target server (default: http://localhost:8008)
+#   SERVER_URL=http://HOST:PORT   target server (default: http://localhost:8018)
 #   PASSWORD=<admin password>     admin password; script will auto-login
 #   TOKEN=<admin token>           admin token for HTTP mode (skips the login step)
-#   OUTPUT=<path>                 output path; defaults to ./pulse-backup-<utc>.db
+#   OUTPUT=<path>                 output path; defaults to ./pulse-ds-backup-<utc>.db
 #
 # If neither PASSWORD nor TOKEN is supplied in HTTP mode, the script
 # prompts interactively for the admin password (hidden input).
@@ -35,19 +35,19 @@
 #   TOKEN=abc SERVER_URL=https://old:8008 ./scripts/backup.sh
 #   ./scripts/backup.sh --mode docker                            # stop-copy-start (docker)
 #   ./scripts/backup.sh --mode systemd                           # stop-copy-start (systemd)
-#   ./scripts/backup.sh --mode systemd --data-dir /opt/pulse/data -o /tmp/foo.db
+#   ./scripts/backup.sh --mode systemd --data-dir /opt/pulse-ds/data -o /tmp/foo.db
 
 set -euo pipefail
 
-SERVER_URL="${SERVER_URL:-http://localhost:8008}"
+SERVER_URL="${SERVER_URL:-http://localhost:8018}"
 TOKEN="${TOKEN:-}"
 PASSWORD="${PASSWORD:-}"
 OUTPUT="${OUTPUT:-}"
 MODE="http"
 COMPOSE_DIR="."
 DATA_DIR=""
-SERVICE_NAME="pulse-server"
-INSTALL_DIR="/opt/pulse"
+SERVICE_NAME="pulse-ds-server"
+INSTALL_DIR="/opt/pulse-ds"
 
 usage() {
   sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'
@@ -139,7 +139,7 @@ detect_docker_data_dir() {
 
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 if [[ -z "$OUTPUT" ]]; then
-  OUTPUT="pulse-backup-${TS}.db"
+  OUTPUT="pulse-ds-backup-${TS}.db"
 fi
 
 case "$MODE" in

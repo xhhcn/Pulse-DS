@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# pulse-restore -- swap a Pulse bbolt snapshot into the live install.
+# pulse-ds-restore -- swap a Pulse bbolt snapshot into the live install.
 #
 # Works against BOTH deployment styles — same bbolt file, different
 # host path and process manager. Auto-detected, can be forced:
 #
 #   docker   : docker compose (data at ./datatz/metrics.db or whatever
-#              the compose volume mount resolves to; default port 8008)
-#   systemd  : standalone binary installed by install-pulse-server.sh
-#              (data at /opt/pulse/data/metrics.db, service
-#              pulse-server, default port 8008)
+#              the compose volume mount resolves to; default port 8018)
+#   systemd  : standalone binary installed by install-pulse-ds-server.sh
+#              (data at /opt/pulse-ds/data/metrics.db, service
+#              pulse-ds-server, default port 8018)
 #
 # Usage:
 #   ./scripts/restore.sh <backup.db>                     # auto-detect mode
@@ -37,8 +37,8 @@ COMPOSE_DIR="."
 DATA_DIR=""
 MODE="auto"
 PORT=""
-SERVICE_NAME="pulse-server"
-INSTALL_DIR="/opt/pulse"
+SERVICE_NAME="pulse-ds-server"
+INSTALL_DIR="/opt/pulse-ds"
 YES="false"
 BACKUP=""
 
@@ -189,22 +189,22 @@ case "$MODE" in
         }
         in_p && /^[^[:space:]]/ {in_p=0}
       ' "$compose_file")"
-      [[ -z "$PORT" ]] && PORT=8008
+      [[ -z "$PORT" ]] && PORT=8018
     fi
     ;;
   systemd)
     [[ -z "$DATA_DIR" ]] && DATA_DIR="$INSTALL_DIR/data"
-    [[ -z "$PORT" ]] && PORT=8008
+    [[ -z "$PORT" ]] && PORT=8018
     if ! command -v systemctl >/dev/null 2>&1; then
       echo "error: systemctl not found" >&2
       exit 6
     fi
     if [[ ! -f "/etc/systemd/system/${SERVICE_NAME}.service" ]]; then
       echo "error: /etc/systemd/system/${SERVICE_NAME}.service missing" >&2
-      echo "       install it first with install-pulse-server.sh, or pass --service" >&2
+      echo "       install it first with install-pulse-ds-server.sh, or pass --service" >&2
       exit 7
     fi
-    # Root is required to touch /opt/pulse and control the unit.
+    # Root is required to touch /opt/pulse-ds and control the unit.
     if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
       echo "error: systemd mode needs root (re-run with sudo)" >&2
       exit 8
@@ -292,7 +292,7 @@ case "$MODE" in
   docker)
     echo "       recent container logs (via docker compose):" >&2
     # Ask compose itself for the logs — it knows the actual container
-    # name it created, which is not necessarily "pulse-monitor". The
+    # name it created, which is not necessarily "pulse-ds". The
     # `>&2 2>&1` dance sends both streams to our stderr without
     # swallowing compose's "no container" warning.
     docker compose logs --tail=60 --no-log-prefix >&2 2>&1 || true

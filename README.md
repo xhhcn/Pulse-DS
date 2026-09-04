@@ -9,6 +9,7 @@ Pulse 的独立服务器（Dedicated Server）发行版。
 - Docker 镜像：`xhh1128/pulse-ds`
 - 数据兼容：可直接复用原有 `metrics.db`
 - 客户端：使用本仓库的客户端（带硬件采集），支持 Linux / macOS / Windows；原 Pulse 客户端可接入，但没有硬件信息
+- 与 Pulse 共存：默认端口 `8018`、目录 `/opt/pulse-ds`、服务 `pulse-ds-server` / `pulse-ds-client`，与 Pulse 的 `8008` / `/opt/pulse` / `pulse-server` 互不影响，可同机并存
 
 ## 采集内容
 
@@ -21,13 +22,13 @@ Pulse 的独立服务器（Dedicated Server）发行版。
 ### 方式 1：一键安装（推荐）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/install-pulse-server.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/install-pulse-ds-server.sh | sudo bash
 ```
 
 安装完成后访问：
 
 ```text
-http://YOUR_IP:8008
+http://YOUR_IP:8018
 ```
 
 ### 方式 2：Docker Compose
@@ -38,18 +39,24 @@ curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/docker-compose.y
 docker compose up -d
 ```
 
-## 从 Pulse 无损切换到 Pulse-DS
+## 从 Pulse 迁移到 Pulse-DS
 
-只替换服务端二进制，不删除数据目录（`amd64` 换成 `arm64` 即为 ARM 版本）：
+Pulse-DS 安装在独立的目录与服务名下，不会触碰原有的 Pulse。先按上面安装 Pulse-DS，再把旧数据热迁移过来（旧端可以在同一台机器上）：
 
 ```bash
-sudo systemctl stop pulse-server
-sudo wget https://github.com/xhhcn/Pulse-DS/releases/latest/download/pulse-server-standalone-linux-amd64 -O /opt/pulse/pulse-server
-sudo chmod +x /opt/pulse/pulse-server
-sudo systemctl start pulse-server
+sudo pulse-ds-migrate --from http://127.0.0.1:8008
 ```
 
-> 以上操作不会删除 `/opt/pulse/data/metrics.db`。切换后请用下面的命令重装客户端，硬件信息才会出现。
+迁移完成后停掉旧的 Pulse，并用下面的命令重装客户端，硬件信息才会出现。
+
+**更新 Pulse-DS**（`amd64` 换成 `arm64` 即为 ARM 版本）：
+
+```bash
+sudo systemctl stop pulse-ds-server
+sudo wget https://github.com/xhhcn/Pulse-DS/releases/latest/download/pulse-server-standalone-linux-amd64 -O /opt/pulse-ds/pulse-ds-server
+sudo chmod +x /opt/pulse-ds/pulse-ds-server
+sudo systemctl start pulse-ds-server
+```
 
 ## 客户端安装
 
@@ -73,7 +80,7 @@ powershell -ExecutionPolicy Bypass -Command "& { $env:AgentId='<ID>'; $env:Serve
 ## 升级
 
 - Docker：拉取新镜像后重建容器
-- 二进制：下载最新 `pulse-server-standalone-*` 覆盖 `/opt/pulse/pulse-server`
+- 二进制：下载最新 `pulse-server-standalone-*` 覆盖 `/opt/pulse-ds/pulse-ds-server`
 - 客户端：默认每日自动更新
 
 ## 卸载
@@ -81,28 +88,28 @@ powershell -ExecutionPolicy Bypass -Command "& { $env:AgentId='<ID>'; $env:Serve
 ### 仅卸载程序（保留数据）
 
 ```bash
-sudo systemctl stop pulse-server && sudo systemctl disable pulse-server && \
-sudo rm -f /usr/local/bin/pulse-migrate /usr/local/bin/pulse-backup /usr/local/bin/pulse-restore && \
-sudo rm -f /opt/pulse/pulse-server /etc/systemd/system/pulse-server.service && \
-sudo rm -rf /opt/pulse/scripts && \
+sudo systemctl stop pulse-ds-server && sudo systemctl disable pulse-ds-server && \
+sudo rm -f /usr/local/bin/pulse-ds-migrate /usr/local/bin/pulse-ds-backup /usr/local/bin/pulse-ds-restore && \
+sudo rm -f /opt/pulse-ds/pulse-ds-server /etc/systemd/system/pulse-ds-server.service && \
+sudo rm -rf /opt/pulse-ds/scripts && \
 sudo systemctl daemon-reload
 ```
 
 ### 完全卸载（删除全部数据，不可恢复）
 
 ```bash
-sudo systemctl stop pulse-server && sudo systemctl disable pulse-server && \
-sudo rm -f /usr/local/bin/pulse-migrate /usr/local/bin/pulse-backup /usr/local/bin/pulse-restore && \
-sudo rm -f /etc/systemd/system/pulse-server.service && \
-sudo rm -rf /opt/pulse && \
+sudo systemctl stop pulse-ds-server && sudo systemctl disable pulse-ds-server && \
+sudo rm -f /usr/local/bin/pulse-ds-migrate /usr/local/bin/pulse-ds-backup /usr/local/bin/pulse-ds-restore && \
+sudo rm -f /etc/systemd/system/pulse-ds-server.service && \
+sudo rm -rf /opt/pulse-ds && \
 sudo systemctl daemon-reload
 ```
 
 ## 生产部署建议
 
-- **HTTPS**：客户端上报的硬件清单、Secret 与管理员登录都走这条链路。在 `pulse-server.service` 中设置 `TLS_CERT` / `TLS_KEY` 直接提供 HTTPS，或在反向代理终止 TLS。
+- **HTTPS**：客户端上报的硬件清单、Secret 与管理员登录都走这条链路。在 `pulse-ds-server.service` 中设置 `TLS_CERT` / `TLS_KEY` 直接提供 HTTPS，或在反向代理终止 TLS。
 - **公开面板**：公开视图已脱敏；若面板对外可见，建议同时开启隐私模式隐藏 IP 与地理位置。
-- **备份即密钥**：`metrics.db` 含管理员密码哈希与所有 Secret，按生产数据库对待；`pulse-backup` / `pulse-migrate` 可热备份与迁移。
+- **备份即密钥**：`metrics.db` 含管理员密码哈希与所有 Secret，按生产数据库对待；`pulse-ds-backup` / `pulse-ds-migrate` 可热备份与迁移。
 - **反向代理 / CDN**：设置 `TRUSTED_PROXIES`（逗号分隔的 IP 或 CIDR），否则登录限流与 SSE 上限按代理 IP 计数。
 - **Docker**：`docker-compose.yaml` 已设置 45 秒优雅停止，请勿缩短。
 

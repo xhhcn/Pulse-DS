@@ -3897,7 +3897,7 @@ func portFromEnv() string {
 	if val := strings.TrimSpace(os.Getenv("PORT")); val != "" {
 		return val
 	}
-	return "8080"
+	return "8018" // distinct from Pulse's 8008 so both can share a host
 }
 
 // formatUptime formats uptime in seconds to human-readable string
@@ -5431,7 +5431,7 @@ func handleAdminBackup(store *Store, w http.ResponseWriter, r *http.Request) {
 	}
 
 	ts := time.Now().UTC().Format("20060102T150405Z")
-	filename := fmt.Sprintf("pulse-backup-%s.db", ts)
+	filename := fmt.Sprintf("pulse-ds-backup-%s.db", ts)
 	log.Printf("📦 Admin backup requested from %s — streaming snapshot %s", getClientIP(r), filename)
 
 	// Write headers BEFORE beginning the stream. Once Snapshot starts

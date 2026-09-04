@@ -17,9 +17,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Default values
-INSTALL_DIR="/opt/pulse"
-SERVICE_NAME="pulse-client"
-UPDATE_SERVICE_NAME="pulse-client-update"
+INSTALL_DIR="/opt/pulse-ds"
+SERVICE_NAME="pulse-ds-client"
+UPDATE_SERVICE_NAME="pulse-ds-client-update"
 GITHUB_REPO="https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/client"
 # 0 = no HTTP listener (push mode only, nothing exposed on the host);
 # pass --port N to enable the pull-mode listener.
@@ -30,8 +30,8 @@ AUTO_UPDATE=true
 UPDATE_INTERVAL="daily"
 
 # macOS launchd constants
-MACOS_PLIST_LABEL="com.pulse.client"
-MACOS_UPDATE_PLIST_LABEL="com.pulse.client.update"
+MACOS_PLIST_LABEL="com.pulse-ds.client"
+MACOS_UPDATE_PLIST_LABEL="com.pulse-ds.client.update"
 MACOS_PLIST_DIR="/Library/LaunchDaemons"
 MACOS_PLIST_PATH="${MACOS_PLIST_DIR}/${MACOS_PLIST_LABEL}.plist"
 MACOS_UPDATE_PLIST_PATH="${MACOS_PLIST_DIR}/${MACOS_UPDATE_PLIST_LABEL}.plist"
@@ -277,7 +277,7 @@ create_service_linux() {
 
     cat > /etc/systemd/system/${SERVICE_NAME}.service << EOF
 [Unit]
-Description=Pulse Monitoring Client
+Description=Pulse-DS Monitoring Client
 After=network.target
 
 [Service]
@@ -288,7 +288,7 @@ Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=pulse-client
+SyslogIdentifier=pulse-ds-client
 LogRateLimitIntervalSec=30
 LogRateLimitBurst=50
 
@@ -375,9 +375,9 @@ $(printf '%s' "$env_xml")    </dict>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/var/log/pulse-client.log</string>
+    <string>/var/log/pulse-ds-client.log</string>
     <key>StandardErrorPath</key>
-    <string>/var/log/pulse-client-error.log</string>
+    <string>/var/log/pulse-ds-client-error.log</string>
 </dict>
 </plist>
 EOF
@@ -454,16 +454,16 @@ create_update_script() {
     cat > "${INSTALL_DIR}/update.sh" << 'UPDATEEOF'
 #!/bin/bash
 #
-# Pulse Client Auto-Update Script (Linux + macOS)
+# Pulse-DS Client Auto-Update Script (Linux + macOS)
 #
 
-INSTALL_DIR="/opt/pulse"
-SERVICE_NAME="pulse-client"
+INSTALL_DIR="/opt/pulse-ds"
+SERVICE_NAME="pulse-ds-client"
 GITHUB_REPO="https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/client"
 CURRENT_BINARY="${INSTALL_DIR}/probe-client"
 TEMP_BINARY="${INSTALL_DIR}/probe-client.tmp"
-MACOS_PLIST_PATH="/Library/LaunchDaemons/com.pulse.client.plist"
-MACOS_PLIST_LABEL="com.pulse.client"
+MACOS_PLIST_PATH="/Library/LaunchDaemons/com.pulse-ds.client.plist"
+MACOS_PLIST_LABEL="com.pulse-ds.client"
 
 log_msg() { echo "$(date '+%Y-%m-%d %H:%M:%S') $1"; }
 
@@ -629,7 +629,7 @@ show_status() {
     if [[ "$OS" == "Darwin" ]]; then
         echo "Service Commands (launchd):"
         echo "  Check status:   sudo launchctl print system/${MACOS_PLIST_LABEL}"
-        echo "  View logs:      tail -f /var/log/pulse-client.log"
+        echo "  View logs:      tail -f /var/log/pulse-ds-client.log"
         echo "  Restart:        sudo launchctl kickstart -k system/${MACOS_PLIST_LABEL}"
         echo "  Stop:           sudo launchctl bootout system/${MACOS_PLIST_LABEL}"
         echo "  Start again:    sudo launchctl bootstrap system ${MACOS_PLIST_PATH}"
@@ -637,7 +637,7 @@ show_status() {
             echo ""
             echo "Auto-Update Commands:"
             echo "  Run now:        sudo launchctl kickstart system/${MACOS_UPDATE_PLIST_LABEL}"
-            echo "  Update logs:    tail -f /var/log/pulse-client.log"
+            echo "  Update logs:    tail -f /var/log/pulse-ds-client.log"
             echo "  Disable:        sudo launchctl bootout system/${MACOS_UPDATE_PLIST_LABEL} && sudo rm -f ${MACOS_UPDATE_PLIST_PATH}"
         fi
         echo ""

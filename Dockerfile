@@ -53,12 +53,12 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Set working directory
 WORKDIR /app
 
-# Expose port (default 8008, can be changed via docker-compose)
-EXPOSE 8008
+# Expose port (default 8018, can be changed via docker-compose)
+EXPOSE 8018
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget -q --spider http://127.0.0.1:8008/healthz || exit 1
+    CMD wget -q --spider http://127.0.0.1:8018/healthz || exit 1
 
 # Start supervisor (manages both nginx and backend)
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
