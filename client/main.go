@@ -3713,21 +3713,32 @@ func getCPUModel() string {
 	hasFreqLinux := strings.Contains(model, "GHz") || strings.Contains(model, "MHz")
 	var speedLinux string
 
-	// Get frequency if not in model name (typically AMD CPUs)
+	// Get frequency if not in model name (typically AMD and ARM CPUs).
+	//
+	// The clock printed in the model line is an inventory value, so it must
+	// be the rated one and must not move. Every "current frequency" source
+	// (scaling_cur_freq, /proc/cpuinfo "cpu MHz", lscpu "CPU MHz") reports
+	// whatever the governor is doing at that instant, which on an idle
+	// Raspberry Pi made the same machine identify itself as 1.30, 1.40 and
+	// 1.50 GHz on successive restarts. The live value is already reported
+	// separately as hardware.cpu.mhz, so prefer the rated maximum here and
+	// keep the current reading only for platforms that expose nothing else
+	// (VMs without cpufreq, where it is the host's nominal clock anyway).
 	if !hasFreqLinux {
-		// Get CPU frequency (MHz) and convert to GHz
-		cmd = exec.Command("sh", "-c", "grep -m1 'cpu MHz' /proc/cpuinfo | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
-		output, err = cmd.Output()
-		if err == nil {
-			var mhz float64
-			if _, err := fmt.Sscanf(strings.TrimSpace(string(output)), "%f", &mhz); err == nil && mhz > 0 {
-				speedLinux = fmt.Sprintf("%.2f", mhz/1000.0)
+		for _, p := range []string{
+			"/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq",
+			"/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq",
+		} {
+			if data, err := ioutil.ReadFile(p); err == nil {
+				if khz, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil && khz > 0 {
+					speedLinux = fmt.Sprintf("%.2f", float64(khz)/1e6)
+					break
+				}
 			}
 		}
 
-		// If speed not found, try lscpu
 		if speedLinux == "" {
-			cmd = exec.Command("sh", "-c", "lscpu | grep 'CPU MHz' | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
+			cmd = exec.Command("sh", "-c", "lscpu | grep 'CPU max MHz' | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
 			output, err = cmd.Output()
 			if err == nil {
 				var mhz float64
@@ -3737,18 +3748,14 @@ func getCPUModel() string {
 			}
 		}
 
-		// Try /sys/devices/system/cpu/cpu0/cpufreq/* — in kHz.
+		// No cpufreq at all (most VMs): the nominal clock is all there is.
 		if speedLinux == "" {
-			for _, p := range []string{
-				"/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq",
-				"/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_cur_freq",
-				"/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq",
-			} {
-				if data, err := ioutil.ReadFile(p); err == nil {
-					if khz, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil && khz > 0 {
-						speedLinux = fmt.Sprintf("%.2f", float64(khz)/1e6)
-						break
-					}
+			cmd = exec.Command("sh", "-c", "grep -m1 'cpu MHz' /proc/cpuinfo | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
+			output, err = cmd.Output()
+			if err == nil {
+				var mhz float64
+				if _, err := fmt.Sscanf(strings.TrimSpace(string(output)), "%f", &mhz); err == nil && mhz > 0 {
+					speedLinux = fmt.Sprintf("%.2f", mhz/1000.0)
 				}
 			}
 		}

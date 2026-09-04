@@ -138,6 +138,7 @@ const D: Record<string, [string, string]> = {
   'detail.maxFreq': ['max {v}', '最高 {v}'],
   'detail.cache': ['L3 {v}', 'L3 {v}'],
   'detail.machine': ['Machine', '整机'],
+  'detail.serial': ['Serial number', '序列号'],
   'detail.board': ['Mainboard', '主板'],
   'detail.bios': ['BIOS', 'BIOS'],
   'detail.memoryModules': ['{n} × {size} {type}', '{n} × {size} {type}'],

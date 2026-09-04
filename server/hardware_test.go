@@ -90,13 +90,22 @@ func TestEvaluateHealthVerdicts(t *testing.T) {
 }
 
 func TestMaskHardwareForPublicStripsSerialsWithoutTouchingOriginal(t *testing.T) {
-	hw := &HardwareInfo{Disks: []DiskHardware{{Device: "sda", Serial: "S3Z9NB0K123456"}}}
+	hw := &HardwareInfo{Disks: []DiskHardware{{Device: "sda", Serial: "S3Z9NB0K123456"}}, System: &SystemHardware{Product: "Super Server", Serial: "S1234567890"}}
 	masked := maskHardwareForPublic(hw)
 	if masked.Disks[0].Serial != "" {
 		t.Fatalf("serial not masked")
 	}
 	if hw.Disks[0].Serial == "" {
 		t.Fatalf("original snapshot was mutated")
+	}
+	if masked.System.Serial != "" {
+		t.Fatalf("chassis serial leaked to the public view")
+	}
+	if masked.System.Product != "Super Server" {
+		t.Fatalf("the machine model is public information: %q", masked.System.Product)
+	}
+	if hw.System.Serial == "" {
+		t.Fatalf("original system snapshot was mutated")
 	}
 	if maskHardwareForPublic(nil) != nil {
 		t.Fatalf("nil must stay nil")

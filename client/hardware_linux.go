@@ -636,7 +636,29 @@ func pciName(vendor, device string) string {
 	if haveVendor {
 		return shortVendor(vendorName) + " " + d
 	}
+	// Minimal cloud images and stripped server installs ship no pci.ids at
+	// all, and "1234:1111" tells an operator nothing. The adapters that turn
+	// up on exactly those machines are a short, stable list: the virtual GPUs
+	// of the common hypervisors and the VGA cores built into server BMCs.
+	if name, ok := pciWellKnown[v+":"+d]; ok {
+		return name
+	}
 	return v + ":" + d
+}
+
+var pciWellKnown = map[string]string{
+	"1234:1111": "QEMU Standard VGA",
+	"1af4:1050": "Red Hat Virtio GPU",
+	"15ad:0405": "VMware SVGA II",
+	"80ee:beef": "VirtualBox Graphics Adapter",
+	"1414:5353": "Microsoft Hyper-V Video",
+	"1a03:2000": "ASPEED Graphics Family",
+	"102b:0522": "Matrox G200e",
+	"102b:0534": "Matrox G200eW",
+	"102b:0536": "Matrox G200eH3",
+	"102b:0538": "Matrox G200eH",
+	"1002:515e": "ATI ES1000",
+	"1002:4752": "ATI Rage XL",
 }
 
 // shortVendor trims the legal boilerplate pci.ids carries:
@@ -774,6 +796,9 @@ func collectSystemHardware() *SystemHardware {
 		// carries the brand ("Raspberry Pi 4 Model B Rev 1.1"), so it becomes
 		// the product on its own rather than being split into vendor + model.
 		s.Product = deviceTreeModel()
+		s.Serial = strings.Trim(readFile("/proc/device-tree/serial-number"), "\x00 ")
+	} else {
+		s.Serial = dmiID("product_serial")
 	}
 	if bv, bn := dmiID("board_vendor"), dmiID("board_name"); bn != "" {
 		if bv != "" && !strings.HasPrefix(strings.ToLower(bn), strings.ToLower(bv)) && bv != s.Vendor {

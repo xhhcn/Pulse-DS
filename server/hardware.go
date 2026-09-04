@@ -218,8 +218,11 @@ type SystemHardware struct {
 	RebootRequired bool   `json:"reboot_required"`
 	Vendor         string `json:"vendor,omitempty"`  // DMI system vendor
 	Product        string `json:"product,omitempty"` // DMI product name
-	Board          string `json:"board,omitempty"`   // DMI board name
-	BIOS           string `json:"bios,omitempty"`    // BIOS version (date)
+	// Chassis serial / service tag: what a datacentre ticket or an RMA is
+	// filed under. Admin-only, like the disk serials.
+	Serial string `json:"serial,omitempty"`
+	Board  string `json:"board,omitempty"` // DMI board name
+	BIOS   string `json:"bios,omitempty"`  // BIOS version (date)
 	// Every PCI display controller by name ("ASPEED Graphics Family" on a
 	// server board with only the BMC's VGA), so the page can say whether the
 	// machine has a GPU at all.
@@ -287,6 +290,7 @@ func maskHardwareForPublic(hw *HardwareInfo) *HardwareInfo {
 		sys.Kernel = ""
 		sys.BIOS = ""
 		sys.Board = ""
+		sys.Serial = ""
 		clone.System = &sys
 	}
 	return &clone

@@ -214,3 +214,18 @@ func TestParseMMCLifeTime(t *testing.T) {
 		}
 	}
 }
+
+func TestPCINameFallsBackToWellKnownAdapters(t *testing.T) {
+	// A host without pci.ids: the map has to carry the virtual and BMC GPUs.
+	pciIDsOnce.Do(func() {})
+	if got := pciName("0x1234", "0x1111"); got != "QEMU Standard VGA" {
+		t.Fatalf("qemu vga: %q", got)
+	}
+	if got := pciName("0x1a03", "0x2000"); got != "ASPEED Graphics Family" {
+		t.Fatalf("aspeed: %q", got)
+	}
+	// Anything genuinely unknown still shows its identifiers rather than lying.
+	if got := pciName("0xfff2", "0xfff3"); got != "fff2:fff3" {
+		t.Fatalf("unknown: %q", got)
+	}
+}

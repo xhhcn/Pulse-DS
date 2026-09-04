@@ -170,6 +170,7 @@ export function systemRows(s: Server): Array<[string, string]> {
     const sy = hw.system;
     const machine = [sy.vendor, sy.product].filter(Boolean).join(' ');
     if (machine) rows.push([t('detail.machine'), esc(machine)]);
+    if (sy.serial) rows.push([t('detail.serial'), `<span class="mono">${esc(sy.serial)}</span>`]);
     if (sy.board && sy.board !== sy.product) rows.push([t('detail.board'), esc(sy.board)]);
   }
   if (!hw?.cpu && s.cpuModel) {
@@ -438,7 +439,11 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
       ];
     });
     const head = [t('hw.col.device'), t('hw.col.model'), t('hw.col.size'), t('hw.col.smart'), ...(detail ? [t('hw.col.temp'), t('hw.col.hours'), t('hw.col.life'), t('hw.col.sectors')] : []), t('hw.col.io'), t('hw.col.util')];
-    const hint = detail ? '' : `<p class="text-[12px] t-3 mt-2">${esc(t('hw.smartHint'))}</p>`;
+    // The hint is about a missing smartctl, so it only applies to drives that
+    // implement SMART at all: SD cards and eMMC chips never do, and telling
+    // their owner to install smartmontools would send them after nothing.
+    const smartCapable = hw.disks.some((d: any) => !['sd', 'emmc'].includes(String(d.type || '').toLowerCase()));
+    const hint = detail || !smartCapable ? '' : `<p class="text-[12px] t-3 mt-2">${esc(t('hw.smartHint'))}</p>`;
     out.push(section('hw.disks', 'hard-drive', hw.disks.length, table(head, rows) + hint));
   }
 
@@ -533,6 +538,7 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
     const rows: Array<[string, string]> = [];
     const machine = [sy.vendor, sy.product].filter(Boolean).join(' ');
     if (machine) rows.push([t('detail.machine'), esc(machine)]);
+    if (sy.serial) rows.push([t('detail.serial'), `<span class="mono">${esc(sy.serial)}</span>`]);
     // Boards that carry the same name as the product (Intel server boards) add nothing.
     if (sy.board && sy.board !== sy.product) rows.push([t('detail.board'), esc(sy.board)]);
     if (sy.bios) rows.push([t('hw.firmware'), esc(sy.bios)]);

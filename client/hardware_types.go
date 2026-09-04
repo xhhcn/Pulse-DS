@@ -147,8 +147,11 @@ type SystemHardware struct {
 	RebootRequired bool   `json:"reboot_required"`
 	Vendor         string `json:"vendor,omitempty"`
 	Product        string `json:"product,omitempty"`
-	Board          string `json:"board,omitempty"`
-	BIOS           string `json:"bios,omitempty"`
+	// Chassis serial / service tag: the identifier a datacentre ticket or an
+	// RMA is filed under. Admin-only, like the disk serials.
+	Serial string `json:"serial,omitempty"`
+	Board  string `json:"board,omitempty"`
+	BIOS   string `json:"bios,omitempty"`
 	// Every PCI display controller by name ("ASPEED Graphics Family" on a
 	// server board with only the BMC's VGA), so the page can say whether the
 	// machine has a GPU at all.

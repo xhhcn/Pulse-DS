@@ -14,7 +14,7 @@
 | P0 | 内存 ECC | 可纠正 / 不可纠正错误计数（不可纠正 >0 即为严重） | `/sys/devices/system/edac/mc/*/ce_count` `ue_count` |
 | P1 | 内存条 | 每根内存的插槽、容量、类型（DDR4/5）、标称与实际频率、品牌、型号、是否 ECC | SMBIOS type 17：`/sys/firmware/dmi/entries/17-*/raw`（无需 dmidecode） |
 | P1 | SSD 寿命 | SATA SSD 剩余寿命（各厂商 SMART 属性按名称识别）、NVMe 累计写入量 | `smartctl -j -A` |
-| P2 | 整机标识 | 厂商、产品、主板型号、BIOS 版本与日期；CPU 最高频率与 L3 缓存 | `/sys/class/dmi/id/*`，`/sys/devices/system/cpu/cpu0/{cpufreq,cache}` |
+| P2 | 整机标识 | 厂商、产品、主板型号、BIOS 版本与日期；CPU 最高频率与 L3 缓存 | `/sys/class/dmi/id/*`（无 SMBIOS 的设备树平台如树莓派改读 `/proc/device-tree/model`）；整机序列号 `product_serial` / `serial-number`（仅管理员可见），`/sys/devices/system/cpu/cpu0/{cpufreq,cache}` |
 | P1 | 温度与风扇 | CPU 各插槽/核心温度、主板、NVMe 温度、风扇转速 | `/sys/class/hwmon`，`/sys/class/thermal`，NVMe 由 smartctl 给出 |
 | P1 | BMC 传感器（可选） | 服务器的风扇、电源状态、主板电压、功率——这些只在 BMC 里 | 装有 `ipmitool` 且内核暴露 `/dev/ipmi0` 时每 5 分钟读一次 `ipmitool -c sdr elist`；没装就没有这一段；CSV 里模拟量四列（名称、数值、单位、状态）、离散量五列，`ns` 行跳过。已在 Supermicro X11SSL-F 上实测：8 路温度、4 路风扇、10 路电压 |
 | P1 | 显示适配器 / GPU | 所有 PCI 显示控制器的名称（含主板 BMC 自带的 VGA，用来明确"这台没有 GPU"）；NVIDIA / AMD 计算卡的占用、显存、温度 | `/sys/bus/pci/devices/*/class` + `pci.ids`；`nvidia-smi`；amdgpu 的 sysfs 计数器 |
