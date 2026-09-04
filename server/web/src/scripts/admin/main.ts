@@ -7,7 +7,7 @@ import { applyI18n, getLang, t } from '../core/i18n';
 import { attr, copyText, esc, flashCopied } from '../core/dom';
 import { HttpError, SSEClient, adminToken, apiBase, clearAdminToken, getJSON, redirectToLogin, sendJSON } from '../core/api';
 import { hydrateRemoteIcons, icon } from '../core/icons';
-import { bytes, dateTime } from '../core/format';
+import { bytes, cleanCpuModel, cpuTopology, dateTime } from '../core/format';
 import { Modal } from '../core/modal';
 import { toast } from '../core/toast';
 
@@ -121,7 +121,7 @@ function ipRow(label: string, ip: string): string {
 }
 
 function renderRowHtml(s: any): string {
-  const hasAgent = !!(s.os || s.ipv4 || s.cpu_model || s.time);
+  const hasAgent = !!(s.os || s.ipv4 || s.ipv6 || s.cpu_model || (s.time && !/^0+\s*[a-z]*$/i.test(String(s.time)))); // '0h' is what a host that never reported carries
   const online = s.alert !== true && hasAgent;
   const badges: string[] = [];
   if (s.virtualization_type) badges.push(`<span class="pill pill-sm pill-neutral">${esc(s.virtualization_type)}</span>`);
@@ -129,7 +129,16 @@ function renderRowHtml(s: any): string {
   if (s.hide_tcping === true) badges.push(`<span class="pill pill-sm pill-neutral" title="${attr(t('admin.tcpingOff'))}">${icon('radio', 11)}<span>${esc(t('admin.tcpingOff'))}</span></span>`);
   if (!hasAgent) badges.push(`<span class="pill pill-sm pill-warn">${esc(t('admin.noAgent'))}</span>`);
   const tags = Array.isArray(s.tags) && s.tags.length ? `<div class="flex flex-wrap gap-1 mt-1.5">${s.tags.map((x: string) => `<span class="tag">${esc(x)}</span>`).join('')}</div>` : '';
-  const sub = [s.os ? esc(s.os) : '', s.cpu_model ? esc(s.cpu_model) : ''].filter(Boolean).join(' · ');
+  const topo = cpuTopology(s.cpu_model || '');
+  const subParts = [
+    s.os || '',
+    s.cpu_model ? cleanCpuModel(s.cpu_model, true) : '',
+    topo.cores ? t('detail.cores', { n: topo.cores }) : '',
+    topo.threads ? t('detail.threads', { n: topo.threads }) : '',
+  ].filter(Boolean);
+  const subText = subParts.join(' · ');
+  // Each part stays whole; a phone breaks the line only at a separator.
+  const sub = subParts.map((x) => `<span class="a-seg">${esc(x)}</span>`).join(' · ');
   return `
 <div class="admin-row" draggable="true" data-id="${attr(s.id)}" title="${attr(t('admin.dragHint'))}">
   <div class="a-grip drag-handle">${icon('grip', 16)}</div>
@@ -140,7 +149,7 @@ function renderRowHtml(s: any): string {
       <span class="t-3 mono">#${esc(s.id)}</span>
       ${badges.join('')}
     </div>
-    <div class="flex items-center gap-1.5 text-[12px] t-3 mt-1 min-w-0"><span class="truncate">${sub || '&nbsp;'}</span></div>
+    ${sub ? `<div class="flex items-center gap-1.5 text-[12px] t-3 mt-1 min-w-0"><span class="a-sub truncate" title="${attr(subText)}">${sub}</span></div>` : ''}
     ${tags}
   </div>
   <div class="a-net flex flex-col gap-1 min-w-0">${ipRow('IPv4', s.ipv4 || '')}${ipRow('IPv6', s.ipv6 || '')}</div>

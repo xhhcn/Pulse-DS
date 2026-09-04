@@ -1,6 +1,6 @@
 /** Hardware tab + issue list + system summary for the detail dialog. */
 import { esc, attr } from '../core/dom';
-import { bytes, bytesDecimal, hours, int, linkSpeed, num, speedMB, temp, timeHMS } from '../core/format';
+import { bytes, bytesDecimal, cleanCpuModel, cpuTopology, hours, int, linkSpeed, num, speedMB, temp, timeHMS } from '../core/format';
 import { icon } from '../core/icons';
 import { getLang, t } from '../core/i18n';
 import { fillClass } from './row';
@@ -26,17 +26,6 @@ function miniBar(v: number, width = 72): string {
   return `<span class="inline-flex items-center gap-2"><span class="meter-track" style="width:${width}px;max-width:${width}px"><span class="meter-fill ${fillClass(p, true)}" style="width:${p.toFixed(0)}%"></span></span><span>${p.toFixed(1)}%</span></span>`;
 }
 
-/** "Intel(R) Xeon(R) CPU E3-1240 v5 @ 3.50GHz 4 Core / 8 Thread" → "Intel Xeon E3-1240 v5". */
-export function cleanCpuModel(model: string, stripFreq: boolean): string {
-  let m = String(model || '');
-  m = m.replace(/\(R\)|\(TM\)|\(r\)|\(tm\)/g, '');
-  m = m.replace(/\s+\d+\s+(Physical|Virtual)\s+Cores?$/i, '');
-  m = m.replace(/\s+\d+\s+Core\s*\/\s*\d+\s+Threads?$/i, '');
-  m = m.replace(/\s+\d+\s+Cores?$/i, '');
-  if (stripFreq) m = m.replace(/\s*@\s*[\d.]+\s*[GM]Hz/i, '');
-  m = m.replace(/\bCPU\b/g, '').replace(/\bProcessor\b/g, '');
-  return m.replace(/\s{2,}/g, ' ').trim();
-}
 
 function cacheSize(v: string): string {
   const m = v.match(/^([\d.]+)\s*([KMG])?/i);
@@ -183,7 +172,13 @@ export function systemRows(s: Server): Array<[string, string]> {
     if (machine) rows.push([t('detail.machine'), esc(machine)]);
     if (sy.board && sy.board !== sy.product) rows.push([t('detail.board'), esc(sy.board)]);
   }
-  if (!hw?.cpu && s.cpuModel) rows.push([t('detail.cpu'), esc(s.cpuModel)]);
+  if (!hw?.cpu && s.cpuModel) {
+    // No hardware snapshot (an upstream Pulse agent): show the cleaned model
+    // plus the topology the agent appended, instead of the raw string.
+    const topo = cpuTopology(s.cpuModel);
+    const parts = [cleanCpuModel(s.cpuModel, false), topo.cores ? t('detail.cores', { n: topo.cores }) : '', topo.threads ? t('detail.threads', { n: topo.threads }) : ''].filter(Boolean);
+    rows.push([t('detail.cpu'), esc(parts.join(' · '))]);
+  }
   if (!hw) {
     const k = kernelRow(s);
     if (k) rows.push(k);

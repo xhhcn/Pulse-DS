@@ -1443,6 +1443,20 @@ body.modal-open {
   background: var(--surface);
   font-size: 13px;
 }
+/* On a phone the OS / CPU line may wrap to two lines instead of being cut. */
+@media (max-width: 639px) {
+  .admin-row .a-sub .a-seg {
+    white-space: nowrap;
+  }
+  .admin-row .a-sub {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.4;
+  }
+}
 .admin-row:hover {
   border-color: var(--border-strong);
 }

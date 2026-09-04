@@ -141,3 +141,26 @@ export function relativeAgo(iso: unknown, zh: boolean): string {
   const d = Math.floor(h / 24);
   return zh ? `${d} 天前` : `${d}d ago`;
 }
+
+/**
+ * "Intel(R) Xeon(R) CPU E3-1240 v5 @ 3.50GHz 4 Core / 8 Thread" → "Intel Xeon E3-1240 v5",
+ * "AMD Ryzen 5 5600 6-Core Processor" → "AMD Ryzen 5 5600". The topology the
+ * agent appends is read separately by cpuTopology().
+ */
+export function cleanCpuModel(model: string, stripFreq: boolean): string {
+  let m = String(model || '');
+  m = m.replace(/\(R\)|\(TM\)|\(r\)|\(tm\)/g, '');
+  m = m.replace(/\s+\d+\s+(Physical|Virtual)\s+Cores?$/i, '');
+  m = m.replace(/\s+\d+\s+Core\s*\/\s*\d+\s+Threads?$/i, '');
+  m = m.replace(/\s+\d+\s+Cores?$/i, '');
+  m = m.replace(/\s+\d+-Core\b/i, '');
+  if (stripFreq) m = m.replace(/\s*@\s*[\d.]+\s*[GM]Hz/i, '');
+  m = m.replace(/\bCPU\b/g, '').replace(/\bProcessor\b/g, '');
+  return m.replace(/\s{2,}/g, ' ').trim();
+}
+
+/** Cores / threads the agent appends to the model string ("… 6 Core / 12 Thread"); zeros when absent. */
+export function cpuTopology(model: string): { cores: number; threads: number } {
+  const m = String(model || '').match(/(\d+)\s+Core\s*\/\s*(\d+)\s+Threads?$/i);
+  return m ? { cores: Number(m[1]), threads: Number(m[2]) } : { cores: 0, threads: 0 };
+}
