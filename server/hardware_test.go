@@ -117,3 +117,51 @@ func TestApplyHardwareKeepsPreviousSnapshotWhenAgentOmitsIt(t *testing.T) {
 		t.Fatalf("fresh snapshot not applied: %+v", m)
 	}
 }
+
+func TestErrorCountersAlertOnGrowthNotOnLifetimeTotals(t *testing.T) {
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+	snap := func(rxErr uint64, ecc int64) *HardwareInfo {
+		return &HardwareInfo{CollectedAt: now,
+			Network: []NetInterface{{Name: "eno1", SpeedMbps: 1000, Duplex: "full", OperState: "up", RxErrors: rxErr}},
+			Memory:  &MemoryHardware{ECCSupported: true, ECCCorrectable: ecc},
+		}
+	}
+	// A port that logged 244513 errors since boot but adds none is healthy.
+	first := snap(244513, 40)
+	carryCounters(first, nil, now)
+	if r := evaluateHealth(first, now); len(r.Issues) != 0 {
+		t.Fatalf("lifetime totals must not alert: %v", r.Issues)
+	}
+	// 30 more errors a minute later: growing, but under the threshold.
+	second := snap(244543, 40)
+	carryCounters(second, first, now.Add(time.Minute))
+	if second.Network[0].ErrRecent != 30 || len(evaluateHealth(second, now.Add(time.Minute)).Issues) != 0 {
+		t.Fatalf("small growth: recent=%d issues=%v", second.Network[0].ErrRecent, evaluateHealth(second, now).Issues)
+	}
+	// 60 within the window: alert, with the growth and the total in the text.
+	third := snap(244603, 52)
+	carryCounters(third, second, now.Add(2*time.Minute))
+	r := evaluateHealth(third, now.Add(2*time.Minute))
+	joined := strings.Join(r.Issues, "\n")
+	if !strings.Contains(joined, "eno1 错误持续增加：近 20 分钟 +90（累计 244603）") || !strings.Contains(joined, "ECC 可纠正错误持续增加：近 24 小时 +12（累计 52）") {
+		t.Fatalf("growth alerts missing: %v", r.Issues)
+	}
+	// The window rolls over: the last window's growth still counts once ...
+	fourth := snap(244603, 52)
+	carryCounters(fourth, third, now.Add(11*time.Minute))
+	if fourth.Network[0].ErrRecent != 90 || fourth.Network[0].ErrTrack.Prev != 90 {
+		t.Fatalf("rollover should carry the closed window: %+v", fourth.Network[0])
+	}
+	// ... and after a second quiet window the alert clears.
+	fifth := snap(244603, 52)
+	carryCounters(fifth, fourth, now.Add(22*time.Minute))
+	if fifth.Network[0].ErrRecent != 0 || strings.Contains(strings.Join(evaluateHealth(fifth, now.Add(22*time.Minute)).Issues, "\n"), "eno1") {
+		t.Fatalf("alert should clear once errors stop: %+v", fifth.Network[0])
+	}
+	// A counter reset (reboot) opens a fresh window instead of a bogus burst.
+	sixth := snap(5, 0)
+	carryCounters(sixth, fifth, now.Add(23*time.Minute))
+	if sixth.Network[0].ErrRecent != 0 || sixth.Network[0].ErrTrack.Base != 5 || sixth.Memory.ECCRecent != 0 {
+		t.Fatalf("counter reset: %+v %+v", sixth.Network[0], sixth.Memory)
+	}
+}

@@ -75,7 +75,7 @@ Windows (PowerShell as Administrator):
 powershell -ExecutionPolicy Bypass -Command "& { $env:AgentId='<ID>'; $env:ServerBase='<SERVER_URL>'; $env:Secret='<SECRET>'; irm https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/client/install.ps1 | iex }"
 ```
 
-The client is push-only and opens no port by default. Optional tools: `smartmontools` (SMART on Linux / macOS), `ipmitool` (BMC sensors on Linux), `nvidia-smi` (NVIDIA GPUs); missing tools leave their fields empty.
+The client is push-only and opens no port by default. The installer also installs `smartmontools` (SMART health, temperature, life) and, when a BMC is detected, `ipmitool` (fans, PSUs, voltages): apt / dnf / yum / zypper / apk / pacman on Linux, Homebrew on macOS; pass `--no-tools` to skip. `nvidia-smi` ships with the GPU driver. Missing tools leave their fields empty without affecting the rest.
 
 ## Upgrading
 

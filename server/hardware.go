@@ -46,6 +46,9 @@ type MemoryHardware struct {
 	ECCCorrectable   int64      `json:"ecc_correctable"`   // -1 = unknown
 	ECCUncorrectable int64      `json:"ecc_uncorrectable"` // -1 = unknown
 	DIMMs            []DIMMInfo `json:"dimms,omitempty"`   // populated slots (SMBIOS type 17)
+	// Growth tracking for the correctable counter, see carryCounters.
+	ECCTrack  counterWindow `json:"ecc_track"`
+	ECCRecent uint64        `json:"ecc_recent"`
 }
 
 // DIMMInfo describes one populated memory slot.
@@ -142,6 +145,64 @@ type NetInterface struct {
 	TxDropped  uint64  `json:"tx_dropped"`
 	RxMBps     float64 `json:"rx_mb_s"`
 	TxMBps     float64 `json:"tx_mb_s"`
+	// The agent's error counters are cumulative since boot, so by themselves
+	// they only say that something once happened. The server tracks their
+	// growth (see carryCounters) and the health rule looks at ErrRecent, the
+	// errors added during the last two tracking windows.
+	ErrTrack  counterWindow `json:"err_track"`
+	ErrRecent uint64        `json:"err_recent"`
+}
+
+// counterWindow tracks the growth of a cumulative counter: the value when
+// the current window opened, when that was, and how much the previous
+// window accumulated. Recent growth = Prev + (current - Base).
+type counterWindow struct {
+	Base  uint64 `json:"base"`
+	Since int64  `json:"since"` // unix seconds; 0 = not started
+	Prev  uint64 `json:"prev"`
+}
+
+// advance feeds the latest cumulative value and returns the updated window
+// plus the recent growth. A counter that went backwards (reboot, driver
+// reload) starts a fresh window instead of producing a bogus burst.
+func (w counterWindow) advance(total uint64, now time.Time, window time.Duration) (counterWindow, uint64) {
+	if w.Since == 0 || total < w.Base {
+		return counterWindow{Base: total, Since: now.Unix()}, 0
+	}
+	grown := total - w.Base
+	if now.Sub(time.Unix(w.Since, 0)) >= window {
+		return counterWindow{Base: total, Since: now.Unix(), Prev: grown}, grown
+	}
+	return w, w.Prev + grown
+}
+
+// carryCounters turns cumulative error counters in cur into recent growth,
+// using the windows stored in the previous snapshot of the same host.
+func carryCounters(cur, prev *HardwareInfo, now time.Time) {
+	if cur == nil {
+		return
+	}
+	prevNIC := map[string]NetInterface{}
+	if prev != nil {
+		for _, n := range prev.Network {
+			prevNIC[n.Name] = n
+		}
+	}
+	for i := range cur.Network {
+		n := &cur.Network[i]
+		n.ErrTrack, n.ErrRecent = prevNIC[n.Name].ErrTrack.advance(n.RxErrors+n.TxErrors, now, healthNICErrWindow)
+	}
+	if cur.Memory != nil {
+		var w counterWindow
+		if prev != nil && prev.Memory != nil {
+			w = prev.Memory.ECCTrack
+		}
+		var total uint64
+		if cur.Memory.ECCCorrectable > 0 {
+			total = uint64(cur.Memory.ECCCorrectable)
+		}
+		cur.Memory.ECCTrack, cur.Memory.ECCRecent = w.advance(total, now, healthECCWindow)
+	}
 }
 
 type GPUInfo struct {
@@ -183,6 +244,14 @@ const (
 	healthLoadPerCoreWarn    = 2.0
 	healthLinkExpectedMbps   = 1000 // a dedicated server is expected to negotiate at least gigabit
 	healthHardwareStaleAfter = 10 * time.Minute
+	// Error counters alert on growth, never on the lifetime total: a port that
+	// logged 47 CRC errors last year is fine, one adding 50 in twenty minutes
+	// has a cable or duplex problem. ECC correctable errors are the same
+	// story on a slower clock (mcelog's page-offlining threshold is 10/24 h).
+	healthNICErrWindow     = 10 * time.Minute
+	healthNICErrRecentWarn = 50 // over the last two windows (about 20 min)
+	healthECCWindow        = 12 * time.Hour
+	healthECCRecentWarn    = 10 // over the last two windows (about 24 h)
 )
 
 // maskHardwareForPublic strips what an attacker could act on from a snapshot
@@ -328,8 +397,9 @@ func evaluateHealth(hw *HardwareInfo, now time.Time) healthResult {
 		if hw.Memory.ECCUncorrectable > 0 {
 			crit.add(fmt.Sprintf("内存 ECC 不可纠正错误 %d", hw.Memory.ECCUncorrectable), fmt.Sprintf("%d uncorrectable ECC memory errors", hw.Memory.ECCUncorrectable))
 		}
-		if hw.Memory.ECCCorrectable > 0 {
-			warn.add(fmt.Sprintf("内存 ECC 可纠正错误 %d", hw.Memory.ECCCorrectable), fmt.Sprintf("%d correctable ECC memory errors", hw.Memory.ECCCorrectable))
+		if hw.Memory.ECCRecent >= healthECCRecentWarn {
+			warn.add(fmt.Sprintf("内存 ECC 可纠正错误持续增加：近 24 小时 +%d（累计 %d）", hw.Memory.ECCRecent, hw.Memory.ECCCorrectable),
+				fmt.Sprintf("correctable ECC memory errors rising: +%d in 24 h (%d total)", hw.Memory.ECCRecent, hw.Memory.ECCCorrectable))
 		}
 	}
 
@@ -398,8 +468,9 @@ func evaluateHealth(hw *HardwareInfo, now time.Time) healthResult {
 		if n.Duplex == "half" {
 			warn.add(fmt.Sprintf("网卡 %s 半双工", n.Name), fmt.Sprintf("NIC %s is half duplex", n.Name))
 		}
-		if n.RxErrors+n.TxErrors > 0 {
-			warn.add(fmt.Sprintf("网卡 %s 错误计数 %d", n.Name, n.RxErrors+n.TxErrors), fmt.Sprintf("NIC %s error count %d", n.Name, n.RxErrors+n.TxErrors))
+		if n.ErrRecent >= healthNICErrRecentWarn {
+			warn.add(fmt.Sprintf("网卡 %s 错误持续增加：近 20 分钟 +%d（累计 %d）", n.Name, n.ErrRecent, n.RxErrors+n.TxErrors),
+				fmt.Sprintf("NIC %s errors rising: +%d in 20 min (%d total)", n.Name, n.ErrRecent, n.RxErrors+n.TxErrors))
 		}
 	}
 

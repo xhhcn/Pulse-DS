@@ -75,7 +75,7 @@ Windows（管理员 PowerShell）：
 powershell -ExecutionPolicy Bypass -Command "& { $env:AgentId='<ID>'; $env:ServerBase='<SERVER_URL>'; $env:Secret='<SECRET>'; irm https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/client/install.ps1 | iex }"
 ```
 
-客户端默认只推送、不监听端口。可选工具：`smartmontools`（SMART，Linux / macOS）、`ipmitool`（BMC 传感器，Linux）、`nvidia-smi`（NVIDIA GPU）；缺失时对应项留空。
+客户端默认只推送、不监听端口。安装脚本会顺带装上 `smartmontools`（SMART 健康、温度、寿命），检测到 BMC 时再装 `ipmitool`（风扇、电源、电压）；Linux 支持 apt / dnf / yum / zypper / apk / pacman，macOS 通过 Homebrew 安装，加 `--no-tools` 可跳过。`nvidia-smi` 随显卡驱动提供。缺少工具时对应项留空，不影响其它采集。
 
 ## 升级
 

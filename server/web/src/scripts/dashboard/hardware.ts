@@ -481,6 +481,7 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
       const idle = n.admin_state === 'down' && !n.rx_bytes && !n.tx_bytes; // unconfigured port: no figures to show
       const errs = (Number(n.rx_errors) || 0) + (Number(n.tx_errors) || 0);
       const drops = (Number(n.rx_dropped) || 0) + (Number(n.tx_dropped) || 0);
+      const recent = Number(n.err_recent) || 0;
       return [
         `<span class="font-semibold mono">${esc(n.name)}</span>`,
         `${esc(linkSpeed(n.speed_mbps))}${n.duplex && n.duplex !== 'unknown' ? ` <span class="t-3">${esc(n.duplex)}</span>` : ''}`,
@@ -493,7 +494,11 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
               : pill('crit', t('detail.linkDown')),
         idle ? '—' : `<span class="text-[var(--ok)]">↓</span> ${esc(speedMB(n.rx_mb_s))} <span class="t-3">·</span> <span class="text-[var(--info)]">↑</span> ${esc(speedMB(n.tx_mb_s))}`,
         idle ? '—' : `${esc(bytes(n.rx_bytes || 0, 1))} <span class="t-3">/</span> ${esc(bytes(n.tx_bytes || 0, 1))}`,
-        idle ? '—' : `<span class="${errs ? 'text-[var(--warn)] font-semibold' : ''}">${int(errs)}</span> <span class="t-3">/</span> ${int(drops)}`,
+        // Lifetime totals are informational; what matters is growth, which the
+        // server reports as err_recent (last ~20 min) and flags from 50 up.
+        idle
+          ? '—'
+          : `<span class="${recent >= 50 ? 'text-[var(--warn)] font-semibold' : ''}">${int(errs)}</span>${recent ? ` <span class="t-3">+${int(recent)}</span>` : ''} <span class="t-3">/</span> ${int(drops)}`,
       ];
     });
     out.push(

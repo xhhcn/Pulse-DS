@@ -3358,6 +3358,11 @@ func applyHardware(metric *SystemMetric, incoming *HardwareInfo, existing *Syste
 		if incoming.CollectedAt.IsZero() {
 			incoming.CollectedAt = time.Now().UTC()
 		}
+		var prev *HardwareInfo
+		if existing != nil {
+			prev = existing.Hardware
+		}
+		carryCounters(incoming, prev, time.Now())
 		metric.Hardware = incoming
 	} else if existing != nil {
 		metric.Hardware = existing.Hardware

@@ -27,6 +27,7 @@ CLIENT_PORT="0"
 AGENT_NAME=""
 SECRET=""
 AUTO_UPDATE=true
+INSTALL_TOOLS=true   # smartmontools (+ ipmitool when a BMC is present); --no-tools to skip
 UPDATE_INTERVAL="daily"
 
 # macOS launchd constants
@@ -130,6 +131,10 @@ parse_args() {
                 UPDATE_INTERVAL="$2"
                 shift 2
                 ;;
+            --no-tools)
+                INSTALL_TOOLS=false
+                shift
+                ;;
             --help|-h)
                 show_help
                 exit 0
@@ -156,6 +161,7 @@ show_help() {
     echo "  --auto-update        Enable auto-update (default: enabled)"
     echo "  --no-auto-update     Disable auto-update"
     echo "  --update-interval T  Update check interval (default: daily)"
+    echo "  --no-tools           Do not install smartmontools / ipmitool (SMART and BMC data need them)"
     echo "                       Linux values: daily, hourly, weekly, or OnCalendar expression"
     echo "                       macOS values: daily, hourly, weekly"
     echo "  --help, -h           Show this help message"
@@ -244,6 +250,68 @@ validate_binary() {
 }
 
 # Download binary
+# ─── Optional tools ────────────────────────────────────────────────────────────
+# smartctl is what turns the disk table into SMART health, temperature, hours
+# and remaining life; ipmitool reads the BMC's fans, PSUs and voltages on real
+# servers. Both are small packages, so install them by default. Failure is
+# never fatal: the agent simply leaves those fields empty.
+has_bmc() {
+    [ -e /dev/ipmi0 ] || [ -e /dev/ipmi/0 ] || [ -e /dev/ipmidev/0 ] || [ -d /sys/firmware/dmi/entries/38-0 ]
+}
+
+install_tools() {
+    [ "$INSTALL_TOOLS" = true ] || return 0
+    if [[ "$OS" == "Darwin" ]]; then
+        command -v smartctl >/dev/null 2>&1 && return 0
+        local brew=""
+        for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do [ -x "$b" ] && brew="$b" && break; done
+        if [ -n "$brew" ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+            info "Installing smartmontools via Homebrew (as $SUDO_USER)..."
+            if sudo -u "$SUDO_USER" "$brew" install smartmontools >/dev/null 2>&1; then
+                success "smartmontools installed"
+            else
+                warn "Homebrew could not install smartmontools; run 'brew install smartmontools' later for SMART data"
+            fi
+        else
+            warn "Homebrew not found; run 'brew install smartmontools' later for SMART data"
+        fi
+        return 0
+    fi
+    local pkgs=""
+    command -v smartctl >/dev/null 2>&1 || pkgs="smartmontools"
+    if has_bmc && ! command -v ipmitool >/dev/null 2>&1; then pkgs="$pkgs ipmitool"; fi
+    [ -z "$pkgs" ] && return 0
+    info "Installing optional tools:$pkgs..."
+    local ok=false
+    if command -v apt-get >/dev/null 2>&1; then
+        export DEBIAN_FRONTEND=noninteractive
+        { apt-get install -y -qq $pkgs || { apt-get update -qq && apt-get install -y -qq $pkgs; }; } >/dev/null 2>&1 && ok=true
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y -q $pkgs >/dev/null 2>&1 && ok=true
+    elif command -v yum >/dev/null 2>&1; then
+        yum install -y -q $pkgs >/dev/null 2>&1 && ok=true
+    elif command -v zypper >/dev/null 2>&1; then
+        zypper --non-interactive --quiet install $pkgs >/dev/null 2>&1 && ok=true
+    elif command -v apk >/dev/null 2>&1; then
+        apk add --no-cache -q $pkgs >/dev/null 2>&1 && ok=true
+    elif command -v pacman >/dev/null 2>&1; then
+        pacman -Sy --noconfirm --needed -q $pkgs >/dev/null 2>&1 && ok=true
+    else
+        warn "No supported package manager found; install$pkgs manually for SMART / BMC data"
+        return 0
+    fi
+    if [ "$ok" = true ]; then
+        success "Installed:$pkgs"
+    else
+        warn "Could not install:$pkgs (the agent still works; SMART / BMC fields stay empty)"
+    fi
+    # The BMC character device only appears once the IPMI modules are loaded.
+    if has_bmc && command -v ipmitool >/dev/null 2>&1 && [ ! -e /dev/ipmi0 ]; then
+        modprobe ipmi_devintf >/dev/null 2>&1 || true
+        modprobe ipmi_si >/dev/null 2>&1 || true
+    fi
+}
+
 download_binary() {
     info "Creating installation directory: $INSTALL_DIR"
     mkdir -p "$INSTALL_DIR"
@@ -699,6 +767,7 @@ main() {
 
     detect_arch
     validate_config_values
+    install_tools
     download_binary
     create_service
 
