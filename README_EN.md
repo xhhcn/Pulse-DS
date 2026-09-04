@@ -85,7 +85,7 @@ The client is push-only and opens no port by default. Optional tools: `smartmont
 
 ## Uninstall
 
-### Program only (keeps the data)
+### Server, program only (keeps the data)
 
 ```bash
 sudo systemctl stop pulse-ds-server && sudo systemctl disable pulse-ds-server && \
@@ -95,7 +95,40 @@ sudo rm -rf /opt/pulse-ds/scripts && \
 sudo systemctl daemon-reload
 ```
 
-### Everything (deletes all data, irreversible)
+### Client
+
+Clients self-update daily by default; these commands remove the update job as well and are safe to run even if it was disabled.
+
+Linux (systemd):
+
+```bash
+sudo systemctl stop pulse-ds-client pulse-ds-client-update.timer 2>/dev/null; \
+sudo systemctl disable pulse-ds-client pulse-ds-client-update.timer 2>/dev/null; \
+sudo rm -f /opt/pulse-ds/probe-client /opt/pulse-ds/update.sh \
+  /etc/systemd/system/pulse-ds-client.service \
+  /etc/systemd/system/pulse-ds-client-update.service \
+  /etc/systemd/system/pulse-ds-client-update.timer && \
+sudo systemctl daemon-reload
+```
+
+macOS (launchd):
+
+```bash
+sudo launchctl bootout system/com.pulse-ds.client 2>/dev/null; \
+sudo launchctl bootout system/com.pulse-ds.client.update 2>/dev/null; \
+sudo rm -rf /opt/pulse-ds /Library/LaunchDaemons/com.pulse-ds.client.plist \
+  /Library/LaunchDaemons/com.pulse-ds.client.update.plist /var/log/pulse-ds-client*.log
+```
+
+Windows (PowerShell as Administrator):
+
+```powershell
+Stop-ScheduledTask -TaskName 'PulseDSClient' -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName 'PulseDSClient' -Confirm:$false -ErrorAction SilentlyContinue; Remove-NetFirewallRule -DisplayName 'Pulse-DS Monitoring Client*' -ErrorAction SilentlyContinue; Remove-Item -Path "$env:ProgramFiles\Pulse-DS" -Recurse -Force -ErrorAction SilentlyContinue
+```
+
+> On Linux only the client files are removed and `/opt/pulse-ds` is kept, because the same machine may also run the server.
+
+### Server, everything (deletes all data, irreversible)
 
 ```bash
 sudo systemctl stop pulse-ds-server && sudo systemctl disable pulse-ds-server && \

@@ -85,7 +85,7 @@ powershell -ExecutionPolicy Bypass -Command "& { $env:AgentId='<ID>'; $env:Serve
 
 ## 卸载
 
-### 仅卸载程序（保留数据）
+### 服务端（仅删除程序，保留数据）
 
 ```bash
 sudo systemctl stop pulse-ds-server && sudo systemctl disable pulse-ds-server && \
@@ -95,7 +95,40 @@ sudo rm -rf /opt/pulse-ds/scripts && \
 sudo systemctl daemon-reload
 ```
 
-### 完全卸载（删除全部数据，不可恢复）
+### 卸载客户端
+
+客户端默认带每日自动更新，下面的命令会连同更新任务一起清理；未启用自动更新时也可安全执行。
+
+Linux（systemd）：
+
+```bash
+sudo systemctl stop pulse-ds-client pulse-ds-client-update.timer 2>/dev/null; \
+sudo systemctl disable pulse-ds-client pulse-ds-client-update.timer 2>/dev/null; \
+sudo rm -f /opt/pulse-ds/probe-client /opt/pulse-ds/update.sh \
+  /etc/systemd/system/pulse-ds-client.service \
+  /etc/systemd/system/pulse-ds-client-update.service \
+  /etc/systemd/system/pulse-ds-client-update.timer && \
+sudo systemctl daemon-reload
+```
+
+macOS（launchd）：
+
+```bash
+sudo launchctl bootout system/com.pulse-ds.client 2>/dev/null; \
+sudo launchctl bootout system/com.pulse-ds.client.update 2>/dev/null; \
+sudo rm -rf /opt/pulse-ds /Library/LaunchDaemons/com.pulse-ds.client.plist \
+  /Library/LaunchDaemons/com.pulse-ds.client.update.plist /var/log/pulse-ds-client*.log
+```
+
+Windows（管理员 PowerShell）：
+
+```powershell
+Stop-ScheduledTask -TaskName 'PulseDSClient' -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName 'PulseDSClient' -Confirm:$false -ErrorAction SilentlyContinue; Remove-NetFirewallRule -DisplayName 'Pulse-DS Monitoring Client*' -ErrorAction SilentlyContinue; Remove-Item -Path "$env:ProgramFiles\Pulse-DS" -Recurse -Force -ErrorAction SilentlyContinue
+```
+
+> Linux 上只删除客户端相关文件，保留 `/opt/pulse-ds` 目录，因为同一台机器可能同时装了服务端。
+
+### 完全卸载服务端（删除全部数据，不可恢复）
 
 ```bash
 sudo systemctl stop pulse-ds-server && sudo systemctl disable pulse-ds-server && \
