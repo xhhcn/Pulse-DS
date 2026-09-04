@@ -95,6 +95,16 @@ sudo rm -rf /opt/pulse-ds/scripts && \
 sudo systemctl daemon-reload
 ```
 
+### 完全卸载服务端（删除全部数据，不可恢复）
+
+```bash
+sudo systemctl stop pulse-ds-server && sudo systemctl disable pulse-ds-server && \
+sudo rm -f /usr/local/bin/pulse-ds-migrate /usr/local/bin/pulse-ds-backup /usr/local/bin/pulse-ds-restore && \
+sudo rm -f /etc/systemd/system/pulse-ds-server.service && \
+sudo rm -rf /opt/pulse-ds && \
+sudo systemctl daemon-reload
+```
+
 ### 卸载客户端
 
 客户端默认带每日自动更新，下面的命令会连同更新任务一起清理；未启用自动更新时也可安全执行。
@@ -127,16 +137,6 @@ Stop-ScheduledTask -TaskName 'PulseDSClient' -ErrorAction SilentlyContinue; Unre
 ```
 
 > Linux 上只删除客户端相关文件，保留 `/opt/pulse-ds` 目录，因为同一台机器可能同时装了服务端。
-
-### 完全卸载服务端（删除全部数据，不可恢复）
-
-```bash
-sudo systemctl stop pulse-ds-server && sudo systemctl disable pulse-ds-server && \
-sudo rm -f /usr/local/bin/pulse-ds-migrate /usr/local/bin/pulse-ds-backup /usr/local/bin/pulse-ds-restore && \
-sudo rm -f /etc/systemd/system/pulse-ds-server.service && \
-sudo rm -rf /opt/pulse-ds && \
-sudo systemctl daemon-reload
-```
 
 ## 生产部署建议
 

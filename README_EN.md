@@ -95,6 +95,16 @@ sudo rm -rf /opt/pulse-ds/scripts && \
 sudo systemctl daemon-reload
 ```
 
+### Server, everything (deletes all data, irreversible)
+
+```bash
+sudo systemctl stop pulse-ds-server && sudo systemctl disable pulse-ds-server && \
+sudo rm -f /usr/local/bin/pulse-ds-migrate /usr/local/bin/pulse-ds-backup /usr/local/bin/pulse-ds-restore && \
+sudo rm -f /etc/systemd/system/pulse-ds-server.service && \
+sudo rm -rf /opt/pulse-ds && \
+sudo systemctl daemon-reload
+```
+
 ### Client
 
 Clients self-update daily by default; these commands remove the update job as well and are safe to run even if it was disabled.
@@ -127,16 +137,6 @@ Stop-ScheduledTask -TaskName 'PulseDSClient' -ErrorAction SilentlyContinue; Unre
 ```
 
 > On Linux only the client files are removed and `/opt/pulse-ds` is kept, because the same machine may also run the server.
-
-### Server, everything (deletes all data, irreversible)
-
-```bash
-sudo systemctl stop pulse-ds-server && sudo systemctl disable pulse-ds-server && \
-sudo rm -f /usr/local/bin/pulse-ds-migrate /usr/local/bin/pulse-ds-backup /usr/local/bin/pulse-ds-restore && \
-sudo rm -f /etc/systemd/system/pulse-ds-server.service && \
-sudo rm -rf /opt/pulse-ds && \
-sudo systemctl daemon-reload
-```
 
 ## Production notes
 
