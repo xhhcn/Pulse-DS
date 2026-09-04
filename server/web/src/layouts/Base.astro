@@ -1,0 +1,101 @@
+---
+/**
+ * Shared document shell: meta, pre-paint theme/language bootstrap, the
+ * synchronous navbar-config load (title, favicon, glass mode, operator
+ * custom CSS/JS) and the global stylesheet.
+ */
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  /** Prefix added before the site name in the tab title ("Admin", "Login"). */
+  titlePrefix?: string;
+}
+const { title, description = 'Pulse-DS — real-time server and hardware monitoring.', titlePrefix = '' } = Astro.props;
+const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
+---
+
+<html lang="en" class="dark" data-api-base={apiBase} data-title-prefix={titlePrefix}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content={description} />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1012" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <title>{title}</title>
+    <script is:inline>
+      (function () {
+        var html = document.documentElement;
+        var lang = null;
+        try { lang = localStorage.getItem('preferred-language'); } catch (e) {}
+        if (lang !== 'zh' && lang !== 'en') {
+          var sys = (navigator.language || 'en').toLowerCase();
+          lang = sys.indexOf('zh') === 0 ? 'zh' : 'en';
+        }
+        html.lang = lang === 'zh' ? 'zh-CN' : 'en';
+        var theme = null;
+        try { theme = localStorage.getItem('preferred-theme'); } catch (e) {}
+        if (theme !== 'dark' && theme !== 'light') {
+          theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        html.classList.remove('dark', 'light');
+        html.classList.add(theme);
+        var applyBody = function () {
+          if (document.body) { document.body.classList.remove('dark', 'light'); document.body.classList.add(theme); }
+          else requestAnimationFrame(applyBody);
+        };
+        applyBody();
+
+        // Navbar config: loaded synchronously so operator custom CSS / JS is
+        // in place before first paint and before DOMContentLoaded.
+        try {
+          var xhr = new XMLHttpRequest();
+          xhr.open('GET', '/api/navbar/config', false);
+          xhr.send();
+          if (xhr.status === 200) {
+            var cfg = JSON.parse(xhr.responseText);
+            window.__navbarConfig = cfg;
+            var prefix = html.getAttribute('data-title-prefix') || '';
+            var site = (cfg.text && String(cfg.text).trim()) || 'Pulse';
+            document.title = prefix ? prefix + ' · ' + site : site;
+            if (cfg.logo && /^(https?:\/\/|\/|data:image)/i.test(String(cfg.logo).trim())) {
+              var fav = document.querySelector('link[rel="icon"]');
+              if (fav) {
+                fav.href = String(cfg.logo).trim();
+                var ext = fav.href.toLowerCase().split('?')[0].split('.').pop();
+                var types = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', ico: 'image/x-icon' };
+                if (types[ext]) fav.type = types[ext]; else fav.removeAttribute('type');
+              }
+            }
+            if (cfg.show_glass) html.classList.add('glass-enabled');
+            if (cfg.custom_css && String(cfg.custom_css).trim()) {
+              var st = document.createElement('style');
+              st.setAttribute('data-custom-css', '');
+              st.textContent = cfg.custom_css;
+              document.head.appendChild(st);
+            }
+            if (cfg.custom_js && String(cfg.custom_js).trim()) {
+              // Served by this origin as plain JavaScript (the server strips
+              // legacy <script> wrappers), so it passes the content security
+              // policy; inline injection would not.
+              var s = document.createElement('script');
+              s.src = '/api/custom/script.js';
+              s.async = false;
+              document.head.appendChild(s);
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="min-h-screen">
+    <slot />
+  </body>
+</html>

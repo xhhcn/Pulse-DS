@@ -1,0 +1,160 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g., v1.3.3)'
+        required: true
+        type: string
+
+env:
+  DOCKERHUB_USERNAME: xhh1128
+  IMAGE_NAME: xhh1128/pulse-ds
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Determined tag: $TAG, version: $VERSION"
+
+      - name: Check if server files exist
+        id: check_server_files
+        run: |
+          if git ls-tree -r --name-only HEAD | grep -qE '^(server/|docker/|Dockerfile)'; then
+            echo "server_files_exist=true" >> $GITHUB_OUTPUT
+            echo "Server files found"
+          else
+            echo "server_files_exist=false" >> $GITHUB_OUTPUT
+            echo "No server files found, skipping"
+          fi
+
+      - name: Set up QEMU
+        if: steps.check_server_files.outputs.server_files_exist == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.check_server_files.outputs.server_files_exist == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: steps.check_server_files.outputs.server_files_exist == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        if: steps.check_server_files.outputs.server_files_exist == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.tag }}
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        if: steps.check_server_files.outputs.server_files_exist == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          # Client builds only require Go 1.15, but we use 1.22 to match
+          # the server toolchain and allow rebuilding anything in-repo.
+          go-version: '1.22'
+
+      - name: Build Client Binaries
+        # Build the whole client package (`.`), not `main.go` alone.
+        # The client has been split into main.go + hwprobe_*.go/.s +
+        # linux_kernel{,_other}.go (selected by GOOS/GOARCH build tags),
+        # so single-file builds fail with "undefined: readSysinfo" etc.
+        run: |
+          cd client
+          echo "Building client binaries..."
+          CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o probe-client .
+          chmod +x probe-client
+          CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o probe-client-arm64 .
+          chmod +x probe-client-arm64
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o probe-client-darwin-amd64 .
+          chmod +x probe-client-darwin-amd64
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o probe-client-darwin-arm64 .
+          chmod +x probe-client-darwin-arm64
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o probe-client.exe .
+          echo "Client binaries built successfully"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Release v${{ steps.version.outputs.version }}
+          files: |
+            client/probe-client
+            client/probe-client-arm64
+            client/probe-client-darwin-amd64
+            client/probe-client-darwin-arm64
+            client/probe-client.exe
+            client/install.sh
+          body: |
+            ## Pulse-DS v${{ steps.version.outputs.version }}
+            Dedicated-server monitoring: hardware inventory (processor, DIMMs, disks with SMART, RAID, NICs, GPUs, sensors, BMC/IPMI), server-side health evaluation, live metrics and TCPing. Setup and security notes are in the README.
+            ### Docker Images
+            - `xhh1128/pulse-ds:${{ steps.version.outputs.version }}`
+            - `xhh1128/pulse-ds:latest`
+            ### Downloads
+            | Platform | File |
+            |----------|------|
+            | Linux amd64 | `probe-client` |
+            | Linux arm64 | `probe-client-arm64` |
+            | macOS Intel (amd64) | `probe-client-darwin-amd64` |
+            | macOS Apple Silicon (arm64) | `probe-client-darwin-arm64` |
+            | Windows amd64 | `probe-client.exe` |
+            | Install script (Linux + macOS) | `install.sh` |
+            Server standalone binaries (`pulse-server-standalone-linux-amd64` / `-arm64`) are attached by the standalone workflow.
+            ### Quick Install
+            Server (systemd):
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/install-pulse-server.sh | sudo bash
+            ```
+            Client (Linux & macOS; add the system in `/admin` first to get its ID and secret):
+            ```bash
+            curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/client/install.sh | sudo bash -s -- --id YOUR_ID --server https://YOUR_SERVER --secret YOUR_SECRET
+            ```
+          draft: false
+          prerelease: false

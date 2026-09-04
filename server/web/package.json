@@ -1,0 +1,29 @@
+{
+  "name": "server-probe-web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "clean": "rm -rf node_modules/.vite dist .astro",
+    "dev:clean": "npm run clean && npm run dev"
+  },
+  "dependencies": {
+    "@iconify-json/devicon": "^1.2.52",
+    "@iconify-json/emojione-v1": "^1.2.3",
+    "@iconify-json/logos": "^1.2.10",
+    "@iconify-json/lucide": "^1.2.80",
+    "astro": "^4.10.2",
+    "astro-icon": "^1.1.5"
+  },
+  "devDependencies": {
+    "@astrojs/tailwind": "^5.1.0",
+    "@iconify-json/mingcute": "^1.2.6",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.4.5"
+  }
+}

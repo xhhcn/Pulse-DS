@@ -1,0 +1,30 @@
+services:
+  pulse:
+    image: xhh1128/pulse-ds:latest
+    container_name: pulse-monitor
+    ports:
+      - 8008:8008
+    volumes:
+      - pulse-data:/app/data
+    restart: unless-stopped
+    # Bound container log growth: Docker's default json-file driver never
+    # rotates, so a long-running deployment would slowly fill the disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    # Match supervisord's stopwaitsecs=30 plus slack so the backend has
+    # time to flush + close bbolt cleanly before docker SIGKILLs us.
+    stop_grace_period: 45s
+    networks:
+      - pulse-network
+
+volumes:
+  pulse-data:
+
+networks:
+  pulse-network:
+    enable_ipv6: true
+    ipam:
+      driver: default

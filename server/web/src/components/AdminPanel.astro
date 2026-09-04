@@ -1,0 +1,295 @@
+---
+import Icon from './Icon.astro';
+
+// Placeholder for the custom-code textarea, assembled without literal
+// tag pairs so the dev-server script scanner does not trip on them.
+const lt = '<';
+const customCodePlaceholder = [
+  lt + 'style>',
+  '#all-systems-title { letter-spacing: 0.02em; }',
+  lt + '/style>',
+  '',
+  lt + 'script>',
+  "console.log('custom code loaded');",
+  lt + '/script>',
+].join('\n');
+---
+
+<section class="mx-auto max-w-7xl px-4 sm:px-6 pt-5 sm:pt-7 pb-2">
+  <div class="card">
+    <div class="flex flex-col md:flex-row md:items-center gap-3 px-4 sm:px-5 pt-4 sm:pt-5 pb-4">
+      <div class="flex-1 min-w-0">
+        <h1 class="text-[16px] font-semibold" data-i18n="admin.title">Admin console</h1>
+        <p id="admin-subtitle" class="text-[12px] t-3 mt-0.5"></p>
+      </div>
+      <div class="flex flex-wrap items-center gap-1.5">
+        <button id="add-btn" type="button" class="btn btn-primary"><Icon name="plus" size={15} /><span data-i18n="admin.add">Add server</span></button>
+        <button id="settings-btn" type="button" class="btn"><Icon name="sliders" size={15} /><span data-i18n="admin.settings">Settings</span></button>
+        <span class="w-px h-6 bg-[var(--border)] mx-1 hidden sm:block"></span>
+        <div class="flex items-center gap-1.5">
+          <button id="refresh-btn" type="button" class="icon-btn" data-i18n-title="common.refresh"><Icon name="refresh" size={16} /></button>
+          <button id="backup-btn" type="button" class="icon-btn ok" data-i18n-title="admin.backup"><Icon name="download" size={16} /></button>
+          <button id="password-btn" type="button" class="icon-btn warn" data-i18n-title="admin.changePassword"><Icon name="lock" size={16} /></button>
+          <button id="logout-btn" type="button" class="icon-btn danger" data-i18n-title="admin.logout"><Icon name="log-out" size={16} /></button>
+        </div>
+      </div>
+    </div>
+    <div id="admin-list" class="px-3 sm:px-4 pb-4 flex flex-col gap-2">
+      <div class="py-12 text-center text-[13px] t-3" data-i18n="admin.loading">Loading…</div>
+    </div>
+  </div>
+</section>
+
+<!-- Add -->
+<div id="add-modal" class="modal-root" hidden>
+  <div class="modal-backdrop"></div>
+  <form id="add-form" class="modal-panel" role="dialog" aria-modal="true" novalidate>
+    <div class="modal-head">
+      <div><div class="modal-title" data-i18n="admin.addModal.title">Add server</div><div class="modal-sub" data-i18n="admin.addModal.desc"></div></div>
+      <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
+    </div>
+    <div class="modal-body flex flex-col gap-4">
+      <div>
+        <label class="field-label" for="add-name"><span data-i18n="admin.form.name">Display name</span> <span class="text-[var(--crit)]">*</span></label>
+        <input id="add-name" name="name" class="input" required autocomplete="off" data-i18n-placeholder="admin.form.namePlaceholder" data-autofocus />
+      </div>
+      <p class="field-hint flex items-start gap-2"><Icon name="info" size={13} class="shrink-0 mt-0.5" /><span data-i18n="admin.form.note"></span></p>
+      <p id="add-error" class="field-error" hidden></p>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" data-i18n="admin.form.add">Add</button>
+    </div>
+  </form>
+</div>
+
+<!-- Edit -->
+<div id="edit-modal" class="modal-root" hidden>
+  <div class="modal-backdrop"></div>
+  <form id="edit-form" class="modal-panel" role="dialog" aria-modal="true" novalidate>
+    <input type="hidden" name="id" />
+    <div class="modal-head">
+      <div><div class="modal-title" data-i18n="admin.editModal.title">Edit server</div><div class="modal-sub mono" id="edit-id-label"></div></div>
+      <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
+    </div>
+    <div class="modal-body flex flex-col gap-4">
+      <div>
+        <label class="field-label" for="edit-name"><span data-i18n="admin.form.name">Display name</span> <span class="text-[var(--crit)]">*</span></label>
+        <input id="edit-name" name="name" class="input" required autocomplete="off" data-autofocus />
+      </div>
+      <div>
+        <label class="field-label" for="edit-tags" data-i18n="admin.form.tags">Tags</label>
+        <input id="edit-tags" name="tags" class="input" autocomplete="off" placeholder="Python, traffic:in, speed:out, spr:VIP, spb:pro" />
+        <p class="field-hint" data-i18n="admin.form.tagsHint"></p>
+      </div>
+      <div>
+        <div class="setting-row">
+          <div><div class="setting-title" data-i18n="admin.form.showOnHome">Show on homepage</div><div class="setting-desc" data-i18n="admin.form.showOnHomeDesc"></div></div>
+          <label class="switch"><input type="checkbox" name="show_on_home" checked /><span></span></label>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-title" data-i18n="admin.form.showTcping">Show TCPing</div><div class="setting-desc" data-i18n="admin.form.showTcpingDesc"></div></div>
+          <label class="switch"><input type="checkbox" name="show_tcping" checked /><span></span></label>
+        </div>
+      </div>
+      <p class="field-hint flex items-start gap-2"><Icon name="info" size={13} class="shrink-0 mt-0.5" /><span data-i18n="admin.form.note"></span></p>
+      <p id="edit-error" class="field-error" hidden></p>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary" data-i18n="admin.form.update">Save changes</button>
+    </div>
+  </form>
+</div>
+
+<!-- Delete -->
+<div id="delete-modal" class="modal-root" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-panel" role="alertdialog" aria-modal="true">
+    <div class="modal-head">
+      <div class="flex items-center gap-3">
+        <span class="inline-flex w-9 h-9 items-center justify-center rounded-xl text-[var(--crit)]" style="background:rgba(239,68,68,.12)"><Icon name="trash" size={17} /></span>
+        <div class="modal-title" data-i18n="admin.deleteModal.title">Delete server</div>
+      </div>
+      <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
+    </div>
+    <div class="modal-body text-[13px] t-2" id="delete-text"></div>
+    <div class="modal-foot">
+      <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
+      <button type="button" id="delete-confirm" class="btn btn-danger" data-i18n="common.delete">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div id="settings-modal" class="modal-root" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-panel is-wide" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <div class="modal-title" data-i18n="settings.title">Settings</div>
+      <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
+    </div>
+    <div class="px-5 pt-3 shrink-0">
+      <div class="tabs" role="tablist" id="settings-tabs">
+        <button type="button" class="tab" role="tab" data-stab="general" aria-selected="true"><Icon name="sliders" size={13} /><span data-i18n="settings.tab.general">General</span></button>
+        <button type="button" class="tab" role="tab" data-stab="display" aria-selected="false"><Icon name="palette" size={13} /><span data-i18n="settings.tab.display">Display</span></button>
+        <button type="button" class="tab" role="tab" data-stab="privacy" aria-selected="false"><Icon name="shield" size={13} /><span data-i18n="settings.tab.privacy">Privacy</span></button>
+        <button type="button" class="tab" role="tab" data-stab="tcping" aria-selected="false"><Icon name="radio" size={13} /><span data-i18n="settings.tab.tcping">TCPing</span></button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <!-- General -->
+      <div data-spanel="general" class="flex flex-col gap-4">
+        <div>
+          <label class="field-label" for="s-text" data-i18n="settings.navbarText">Site name</label>
+          <input id="s-text" class="input" placeholder="Pulse" />
+          <p class="field-hint" data-i18n="settings.navbarTextHint"></p>
+        </div>
+        <div>
+          <label class="field-label" for="s-logo" data-i18n="settings.navbarLogo">Logo</label>
+          <input id="s-logo" class="input" placeholder="https://example.com/logo.svg" />
+          <p class="field-hint" data-i18n="settings.navbarLogoHint"></p>
+        </div>
+        <div>
+          <label class="field-label" for="s-secret" data-i18n="settings.sharedSecret">Shared secret</label>
+          <div class="flex gap-2">
+            <input id="s-secret" class="input mono flex-1" readonly />
+            <button type="button" id="s-secret-copy" class="btn" data-i18n-title="common.copy"><span class="i-copy"><Icon name="copy" size={14} /></span><span class="i-check text-[var(--ok)]" hidden><Icon name="check" size={14} /></span></button>
+            <button type="button" id="s-secret-regen" class="btn btn-warn"><Icon name="key" size={14} /><span data-i18n="settings.regenerate">Regenerate</span></button>
+          </div>
+          <p class="field-hint" data-i18n="settings.sharedSecretHint"></p>
+          <p id="s-secret-note" class="field-hint text-[var(--warn)]" hidden></p>
+        </div>
+      </div>
+      <!-- Display -->
+      <div data-spanel="display" class="flex flex-col gap-4" hidden>
+        <div>
+          <div class="setting-row">
+            <div><div class="setting-title" data-i18n="settings.showCards"></div><div class="setting-desc" data-i18n="settings.showCardsDesc"></div></div>
+            <label class="switch"><input type="checkbox" id="s-show-cards" /><span></span></label>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title" data-i18n="settings.showTags"></div><div class="setting-desc" data-i18n="settings.showTagsDesc"></div></div>
+            <label class="switch"><input type="checkbox" id="s-show-tags" /><span></span></label>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title" data-i18n="settings.showTraffic"></div><div class="setting-desc" data-i18n="settings.showTrafficDesc"></div></div>
+            <label class="switch"><input type="checkbox" id="s-show-traffic" /><span></span></label>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-title" data-i18n="settings.glass"></div><div class="setting-desc" data-i18n="settings.glassDesc"></div></div>
+            <label class="switch"><input type="checkbox" id="s-glass" /><span></span></label>
+          </div>
+        </div>
+        <div>
+          <label class="field-label" for="s-code" data-i18n="settings.customCode">Custom CSS &amp; JavaScript</label>
+          <textarea id="s-code" class="textarea" rows="9" placeholder={customCodePlaceholder}></textarea>
+          <p class="field-hint" data-i18n="settings.customCodeHint"></p>
+          <p class="field-hint text-[var(--warn)] flex items-start gap-1.5"><Icon name="alert-triangle" size={12} class="shrink-0 mt-0.5" /><span data-i18n="settings.customCodeWarn"></span></p>
+        </div>
+      </div>
+      <!-- Privacy -->
+      <div data-spanel="privacy" class="flex flex-col gap-4" hidden>
+        <div class="setting-row">
+          <div><div class="setting-title" data-i18n="privacy.enable"></div><div class="setting-desc" data-i18n="privacy.enableDesc"></div></div>
+          <label class="switch"><input type="checkbox" id="s-privacy" /><span></span></label>
+        </div>
+        <div id="s-share" class="subcard p-4 flex flex-col gap-3">
+          <div><div class="setting-title" data-i18n="privacy.share"></div><div class="setting-desc" data-i18n="privacy.shareDesc"></div></div>
+          <div id="s-share-current" hidden>
+            <label class="field-label" data-i18n="privacy.current">Current link</label>
+            <div class="flex gap-2">
+              <input id="s-share-link" class="input mono flex-1 text-[12px]" readonly />
+              <button type="button" id="s-share-copy" class="btn"><span class="i-copy"><Icon name="copy" size={14} /></span><span class="i-check text-[var(--ok)]" hidden><Icon name="check" size={14} /></span><span data-i18n="common.copy">Copy</span></button>
+            </div>
+            <p id="s-share-expires" class="field-hint"></p>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-end">
+            <div>
+              <label class="field-label" for="s-share-hours" data-i18n="privacy.hours">Valid for (hours)</label>
+              <input id="s-share-hours" type="number" min="1" max="720" value="24" class="input" />
+            </div>
+            <button type="button" id="s-share-generate" class="btn btn-primary"><Icon name="key" size={14} /><span data-i18n="privacy.generate">Generate link</span></button>
+            <button type="button" id="s-share-revoke" class="btn"><span data-i18n="privacy.revoke">Revoke link</span></button>
+          </div>
+          <p class="field-hint" data-i18n="privacy.hoursHint"></p>
+        </div>
+      </div>
+      <!-- TCPing -->
+      <div data-spanel="tcping" class="flex flex-col gap-4" hidden>
+        <div>
+          <label class="field-label" for="s-tcp-interval" data-i18n="tcping.interval">Polling interval</label>
+          <div class="flex items-center gap-2">
+            <input id="s-tcp-interval" type="number" min="1" class="input w-32" />
+            <span class="text-[12px] t-3" data-i18n="common.seconds">seconds</span>
+          </div>
+          <p class="field-hint" data-i18n="tcping.intervalHint"></p>
+        </div>
+        <div>
+          <label class="field-label" data-i18n="tcping.targets">Targets</label>
+          <div id="s-tcp-targets" class="flex flex-col gap-2"></div>
+          <button type="button" id="s-tcp-add" class="btn btn-sm mt-2"><Icon name="plus" size={13} /><span data-i18n="tcping.addTarget">Add target</span></button>
+          <p class="field-hint" data-i18n="tcping.targetsHint"></p>
+        </div>
+      </div>
+      <p id="settings-error" class="field-error mt-3" hidden></p>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
+      <button type="button" id="settings-save" class="btn btn-primary" data-i18n="common.save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Regenerate secret confirm -->
+<div id="regen-modal" class="modal-root" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-panel" role="alertdialog" aria-modal="true">
+    <div class="modal-head">
+      <div class="flex items-center gap-3">
+        <span class="inline-flex w-9 h-9 items-center justify-center rounded-xl text-[var(--warn)]" style="background:rgba(245,158,11,.14)"><Icon name="alert-triangle" size={17} /></span>
+        <div class="modal-title" data-i18n="settings.regenerateTitle"></div>
+      </div>
+    </div>
+    <div class="modal-body text-[13px] t-2" data-i18n="settings.regenerateDesc"></div>
+    <div class="modal-foot">
+      <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
+      <button type="button" id="regen-confirm" class="btn btn-warn" data-i18n="settings.regenerate">Regenerate</button>
+    </div>
+  </div>
+</div>
+
+<!-- Change password -->
+<div id="password-modal" class="modal-root" hidden>
+  <div class="modal-backdrop"></div>
+  <form id="password-form" class="modal-panel" role="dialog" aria-modal="true" novalidate>
+    <div class="modal-head">
+      <div class="modal-title" data-i18n="password.title">Change password</div>
+      <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
+    </div>
+    <div class="modal-body flex flex-col gap-4">
+      <div>
+        <label class="field-label" for="pw-current" data-i18n="password.current"></label>
+        <input id="pw-current" name="current" type="password" class="input" autocomplete="current-password" required data-autofocus />
+      </div>
+      <div>
+        <label class="field-label" for="pw-new" data-i18n="password.new"></label>
+        <input id="pw-new" name="new" type="password" class="input" autocomplete="new-password" required />
+        <p class="field-hint" data-i18n="password.minLength"></p>
+      </div>
+      <div>
+        <label class="field-label" for="pw-confirm" data-i18n="password.confirm"></label>
+        <input id="pw-confirm" name="confirm" type="password" class="input" autocomplete="new-password" required />
+      </div>
+      <p id="password-error" class="field-error" hidden></p>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
+      <button type="submit" class="btn btn-warn" data-i18n="password.submit">Change password</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  import '../scripts/admin/main';
+</script>

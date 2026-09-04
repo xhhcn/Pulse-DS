@@ -1,0 +1,22 @@
+---
+import Base from '../layouts/Base.astro';
+import NavBar from '../components/NavBar.astro';
+import AdminPanel from '../components/AdminPanel.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<Base title="Admin · Pulse-DS" titlePrefix="Admin" description="Pulse-DS admin console.">
+  <div id="gate" class="gate">
+    <div class="text-center">
+      <div class="spinner mx-auto mb-3"></div>
+      <p class="text-[13px] t-3" data-i18n="gate.checking">Checking access…</p>
+    </div>
+  </div>
+  <div id="page" class="min-h-screen flex flex-col" hidden>
+    <NavBar page="admin" />
+    <main class="flex-1">
+      <AdminPanel />
+    </main>
+    <Footer />
+  </div>
+</Base>

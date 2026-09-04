@@ -1,0 +1,102 @@
+name: Build Server Standalone Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g., v1.3.3)'
+        required: true
+        type: string
+
+jobs:
+  build-server-standalone:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Determined tag: $TAG, version: $VERSION"
+
+      - name: Check if server files exist
+        id: check_server_files
+        run: |
+          if git ls-tree -r --name-only HEAD | grep -qE '^(server/)'; then
+            echo "server_files_exist=true" >> $GITHUB_OUTPUT
+            echo "Server files found"
+          else
+            echo "server_files_exist=false" >> $GITHUB_OUTPUT
+            echo "No server files found, skipping"
+            exit 0
+          fi
+
+      - name: Set up Go
+        if: steps.check_server_files.outputs.server_files_exist == 'true'
+        uses: actions/setup-go@v5
+        with:
+          # server/go.mod requires Go 1.22+ (uses range-over-int and stdlib
+          # features). The Docker build itself uses golang:1.23-alpine.
+          go-version: '1.22'
+
+      - name: Set up Node.js
+        if: steps.check_server_files.outputs.server_files_exist == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Frontend
+        if: steps.check_server_files.outputs.server_files_exist == 'true'
+        run: |
+          cd server/web
+          npm ci
+          npm run build
+          echo "Frontend built successfully"
+          ls -lh dist/
+
+      - name: Build Server Standalone Binaries
+        if: steps.check_server_files.outputs.server_files_exist == 'true'
+        run: |
+          cd server
+          echo "Building standalone server binaries with embedded frontend..."
+          
+          # Linux amd64
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o pulse-server-standalone-linux-amd64 .
+          chmod +x pulse-server-standalone-linux-amd64
+          echo "Built: pulse-server-standalone-linux-amd64 ($(du -h pulse-server-standalone-linux-amd64 | cut -f1))"
+          
+          # Linux arm64
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o pulse-server-standalone-linux-arm64 .
+          chmod +x pulse-server-standalone-linux-arm64
+          echo "Built: pulse-server-standalone-linux-arm64 ($(du -h pulse-server-standalone-linux-arm64 | cut -f1))"
+
+      - name: Upload standalone binaries to Release
+        if: steps.check_server_files.outputs.server_files_exist == 'true'
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: |
+            server/pulse-server-standalone-linux-amd64
+            server/pulse-server-standalone-linux-arm64
+        # Note: body is intentionally omitted to avoid overwriting the main release notes from docker.yml
+

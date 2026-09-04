@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    path, circle { stroke: #24292f; }
+    @media (prefers-color-scheme: dark) {
+      path, circle { stroke: #c9d1d9; }
+    }
+  </style>
+  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.5 12h2l2-6 3 18 2.5-12h2">
+    <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite"/>
+  </path>
+  <path stroke-linecap="round" stroke-width="1.5" d="M3 12h2M19 12h2">
+    <animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite"/>
+  </path>
+  <path stroke-linecap="round" stroke-width="1.5" opacity="0.5" d="M1 12h1M22 12h1">
+    <animate attributeName="opacity" values="0.2;0.5;0.2" dur="2s" repeatCount="indefinite"/>
+  </path>
+  <circle cx="12" cy="12" r="9" stroke-width="1.5" opacity="0.2">
+    <animate attributeName="opacity" values="0.1;0.3;0.1" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="12" cy="12" r="5" stroke-width="1.5" opacity="0.4">
+    <animate attributeName="opacity" values="0.2;0.6;0.2" dur="2s" repeatCount="indefinite"/>
+  </circle>
+</svg> 

@@ -1,0 +1,52 @@
+---
+import Icon from './Icon.astro';
+---
+
+<div class="min-h-screen flex flex-col items-center justify-center px-4 py-10">
+  <div class="login-card">
+    <div class="flex items-center gap-2.5 mb-7">
+      <span id="brand-logo" class="inline-flex w-8 h-8 items-center justify-center rounded-lg" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="default-logo"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6.5 12h2l2-6 3 18 2.5-12h2" /><path stroke="currentColor" stroke-linecap="round" stroke-width="1.8" d="M2.5 12h2M19.5 12h2" opacity="0.5" /></svg>
+      </span>
+      <span id="brand-text" class="brand-name">Pulse</span>
+    </div>
+    <h1 id="login-title" class="text-[16px] font-semibold" data-i18n="login.title">Sign in</h1>
+    <p id="login-subtitle" class="text-[13px] t-3 mt-1" data-i18n="login.subtitle"></p>
+
+    <form id="login-form" class="mt-6 flex flex-col gap-4" novalidate>
+      <div>
+        <label class="field-label" for="password" data-i18n="login.password">Password</label>
+        <div class="relative">
+          <input id="password" name="password" type="password" class="input pr-11" required autocomplete="current-password" autofocus />
+          <button type="button" id="toggle-password" class="icon-btn icon-btn-sm absolute right-1.5 top-1/2 -translate-y-1/2" data-i18n-title="login.show">
+            <span class="i-show"><Icon name="eye" size={15} /></span><span class="i-hide" hidden><Icon name="eye-off" size={15} /></span>
+          </button>
+        </div>
+      </div>
+      <div id="confirm-wrap" hidden>
+        <label class="field-label" for="confirm" data-i18n="login.confirm">Confirm password</label>
+        <input id="confirm" name="confirm" type="password" class="input" autocomplete="new-password" />
+      </div>
+      <p id="login-error" class="field-error" hidden></p>
+      <button type="submit" id="login-submit" class="btn btn-primary w-full h-10 mt-1" data-i18n="login.submit">Sign in</button>
+    </form>
+
+    <div class="flex items-center justify-between mt-6 pt-5 border-t border-[var(--border)]">
+      <a href="/" class="text-[12px] t-3 hover:text-[var(--text)] inline-flex items-center gap-1.5 transition-colors"><Icon name="chevron-left" size={13} /><span data-i18n="login.back">Back</span></a>
+      <div class="flex items-center gap-1">
+        <button id="lang-btn" type="button" class="icon-btn icon-btn-sm" data-i18n-title="common.language"><Icon name="languages" size={15} /></button>
+        <button id="theme-btn" type="button" class="icon-btn icon-btn-sm"><span class="only-dark"><Icon name="moon" size={15} /></span><span class="only-light"><Icon name="sun" size={15} /></span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style is:global>
+  html.dark .only-light { display: none; }
+  html.light .only-dark { display: none; }
+  .only-dark, .only-light { display: inline-flex; }
+</style>
+
+<script>
+  import '../scripts/login/main';
+</script>

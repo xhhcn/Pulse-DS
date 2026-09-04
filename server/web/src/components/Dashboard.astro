@@ -1,0 +1,91 @@
+---
+import Icon from './Icon.astro';
+const sorts = ['default', 'name', 'health', 'uptime', 'cpu', 'memory', 'disk', 'os'];
+---
+
+<section class="mx-auto max-w-7xl px-4 sm:px-6 pt-5 sm:pt-7 pb-2 flex flex-col gap-4 sm:gap-5">
+  <!-- Overview strip -->
+  <div id="stats" class="card stat-strip" hidden>
+    <button type="button" class="stat" data-filter="all" aria-pressed="true">
+      <span class="stat-head" data-i18n="dash.stat.total">Total</span>
+      <span class="stat-value" data-stat="total">–</span>
+      <span class="stat-sub" data-stat="total-sub"></span>
+    </button>
+    <button type="button" class="stat" data-filter="online" aria-pressed="false">
+      <span class="stat-head" data-i18n="dash.stat.online">Online</span>
+      <span class="stat-value" data-stat="online">–</span>
+      <span class="stat-sub" data-stat="online-sub"></span>
+    </button>
+    <button type="button" class="stat tone-crit" data-filter="offline" aria-pressed="false">
+      <span class="stat-head" data-i18n="dash.stat.offline">Offline</span>
+      <span class="stat-value" data-stat="offline">–</span>
+      <span class="stat-sub" data-stat="offline-sub"></span>
+    </button>
+    <button type="button" class="stat tone-warn" data-filter="attention" aria-pressed="false">
+      <span class="stat-head" data-i18n="dash.stat.attention">Hardware alerts</span>
+      <span class="stat-value" data-stat="attention">–</span>
+      <span class="stat-sub" data-stat="attention-sub"></span>
+    </button>
+  </div>
+
+  <!-- Server list -->
+  <div class="card" id="monitor-root">
+    <div class="flex flex-col sm:flex-row sm:items-center gap-3 px-4 sm:px-5 pt-4 pb-4">
+      <div class="min-w-0 flex-1">
+        <h1 id="all-systems-title" class="text-[16px] font-semibold" data-i18n="dash.title">Servers</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="relative flex-1 sm:flex-none">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 t-3 pointer-events-none"><Icon name="search" size={14} /></span>
+          <input id="system-filter-input" type="search" autocomplete="off" class="input pl-8 sm:w-60" data-i18n-placeholder="dash.search" placeholder="Search…" />
+        </div>
+        <div class="relative" id="sort-wrap">
+          <button id="sort-btn" type="button" class="btn" aria-haspopup="menu" aria-expanded="false">
+            <Icon name="arrow-up-down" size={14} />
+            <span id="sort-label">Sort</span>
+            <span id="sort-dir" class="inline-flex t-3" hidden></span>
+          </button>
+          <div id="sort-menu" class="menu" role="menu" hidden>
+            <div class="menu-label" data-i18n="dash.sortBy">Sort by</div>
+            {sorts.map((s) => (
+              <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-sort={s}>
+                <span data-i18n={`dash.sort.${s}`}>{s}</span>
+                <span class="mark inline-flex t-3"></span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="srv-table">
+      <div class="srv-head">
+        <div class="c-name"><span data-i18n="dash.col.server">Server</span></div>
+        <div class="c-health"><span data-i18n="dash.col.health">Health</span></div>
+        <div class="c-uptime"><span data-i18n="dash.col.uptime">Uptime</span></div>
+        <div class="c-loc"><span data-i18n="dash.col.location">Location</span></div>
+        <div class="c-cpu"><span data-i18n="dash.col.cpu">CPU</span></div>
+        <div class="c-mem"><span data-i18n="dash.col.memory">Memory</span></div>
+        <div class="c-disk"><span data-i18n="dash.col.disk">Disk</span></div>
+        <div class="c-net"><span data-i18n="dash.col.net">Network</span></div>
+        <div class="c-os justify-center"><span data-i18n="dash.col.os">OS</span></div>
+      </div>
+      <div id="systems-body" role="list">
+        <div class="px-5 py-5 flex flex-col gap-4" aria-hidden="true">
+          {[0, 1, 2, 3].map((i) => (
+            <div class="flex items-center gap-4" style={`opacity:${1 - i * 0.2}`}>
+              <span class="skeleton w-2 h-2 rounded-full"></span>
+              <span class="skeleton h-2.5" style={`width:${[34, 46, 28, 40][i]}%`}></span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div id="server-dialog" class="modal-root" hidden></div>
+
+<script>
+  import '../scripts/dashboard/main';
+</script>

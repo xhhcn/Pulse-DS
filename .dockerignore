@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Node modules (will be installed during build)
+server/web/node_modules
+
+# Build artifacts
+*.exe
+probe-client
+probe-server
+
+# Data files (exclude entire data directory)
+server/data/
+data/
+
+# Documentation
+*.md
+
+# Docker files (avoid recursive copy)
+docker-compose*.yaml
+Dockerfile
+
+# Client (not needed for server docker)
+client/
+

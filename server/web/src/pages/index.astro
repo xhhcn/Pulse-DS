@@ -1,0 +1,22 @@
+---
+import Base from '../layouts/Base.astro';
+import NavBar from '../components/NavBar.astro';
+import Dashboard from '../components/Dashboard.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<Base title="Pulse-DS" description="Pulse-DS — real-time server and hardware monitoring.">
+  <div id="gate" class="gate">
+    <div class="text-center">
+      <div class="spinner mx-auto mb-3"></div>
+      <p class="text-[13px] t-3" data-i18n="gate.checking">Checking access…</p>
+    </div>
+  </div>
+  <div id="page" class="min-h-screen flex flex-col" hidden>
+    <NavBar page="home" showLive={true} />
+    <main class="flex-1">
+      <Dashboard />
+    </main>
+    <Footer />
+  </div>
+</Base>
