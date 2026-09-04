@@ -252,6 +252,9 @@ func collectDisks(now time.Time) []DiskHardware {
 		default:
 			d.Type = "ssd"
 		}
+		if strings.EqualFold(derefStr(dev.Tran), "mmc") || strings.HasPrefix(name, "mmcblk") {
+			fillMMC(&d)
+		}
 		// IO rates from the previous sample of /proc/diskstats.
 		if cur, ok := stats[name]; ok {
 			if prev, ok := hwPrevDisk[name]; ok && elapsed > 0 {
@@ -764,6 +767,14 @@ func collectSystemHardware() *SystemHardware {
 	}
 	s.Vendor = dmiID("sys_vendor")
 	s.Product = dmiID("product_name")
+	if s.Vendor == "" && s.Product == "" {
+		// Device-tree platforms (Raspberry Pi and other ARM boards) have no
+		// SMBIOS at all, so /sys/class/dmi/id does not exist and the machine
+		// names itself in the device tree instead. The model string already
+		// carries the brand ("Raspberry Pi 4 Model B Rev 1.1"), so it becomes
+		// the product on its own rather than being split into vendor + model.
+		s.Product = deviceTreeModel()
+	}
 	if bv, bn := dmiID("board_vendor"), dmiID("board_name"); bn != "" {
 		if bv != "" && !strings.HasPrefix(strings.ToLower(bn), strings.ToLower(bv)) && bv != s.Vendor {
 			s.Board = bv + " " + bn
@@ -778,4 +789,56 @@ func collectSystemHardware() *SystemHardware {
 		s.BIOS = bios
 	}
 	return s
+}
+
+// deviceTreeModel returns the board name a device-tree platform publishes,
+// e.g. "Raspberry Pi 4 Model B Rev 1.1". The kernel NUL-terminates these
+// properties, which TrimSpace does not strip.
+func deviceTreeModel() string {
+	return strings.Trim(readFile("/proc/device-tree/model"), "\x00 ")
+}
+
+// fillMMC adds what lsblk cannot report for an SD card or eMMC chip. Their
+// identity lives in the card's CID register (exposed as "name" and "serial",
+// not the "model" attribute lsblk reads), and calling an SD card an SSD is
+// wrong in an inventory: it is the part most likely to wear out.
+func fillMMC(d *DiskHardware) {
+	base := "/sys/block/" + d.Device + "/device/"
+	if d.Model == "" {
+		d.Model = readFile(base + "name")
+	}
+	if d.Serial == "" {
+		d.Serial = readFile(base + "serial")
+	}
+	switch strings.ToUpper(readFile(base + "type")) {
+	case "SD":
+		d.Type = "sd"
+	case "MMC":
+		d.Type = "emmc"
+	}
+	if w, ok := parseMMCLifeTime(readFile(base + "life_time")); ok {
+		d.WearPct = &w
+	}
+}
+
+// parseMMCLifeTime reads the eMMC 5.0 health registers ("0x02 0x01"): each
+// area reports its wear in tenths, 0x01 meaning 0-10% consumed and 0x0B
+// meaning the reserve is exhausted. The worst area's lower bound is returned
+// as a used-percentage, the same quantity the SSD wear rules expect. SD cards
+// do not implement this and return no value.
+func parseMMCLifeTime(raw string) (float64, bool) {
+	var worst uint64
+	for _, f := range strings.Fields(raw) {
+		v, err := strconv.ParseUint(strings.TrimPrefix(strings.ToLower(f), "0x"), 16, 8)
+		if err != nil || v < 1 || v > 0x0B {
+			continue
+		}
+		if v > worst {
+			worst = v
+		}
+	}
+	if worst == 0 {
+		return 0, false
+	}
+	return float64(worst-1) * 10, true
 }

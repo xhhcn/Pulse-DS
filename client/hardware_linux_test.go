@@ -194,3 +194,23 @@ func TestSSDLifeLeft(t *testing.T) {
 		}
 	}
 }
+
+func TestParseMMCLifeTime(t *testing.T) {
+	for raw, want := range map[string]float64{
+		"0x01 0x01": 0,  // brand new
+		"0x02 0x01": 10, // 10-20% of area A consumed
+		"0x03 0x05": 40, // the worst area decides
+		"0x0b 0x01": 100,
+	} {
+		got, ok := parseMMCLifeTime(raw)
+		if !ok || got != want {
+			t.Fatalf("parseMMCLifeTime(%q) = %v, %v; want %v", raw, got, ok, want)
+		}
+	}
+	// SD cards do not implement the registers, and 0x00 means "not defined".
+	for _, raw := range []string{"", "0x00 0x00", "junk"} {
+		if v, ok := parseMMCLifeTime(raw); ok {
+			t.Fatalf("parseMMCLifeTime(%q) should report nothing, got %v", raw, v)
+		}
+	}
+}
