@@ -126,9 +126,22 @@ func parseDMIMemoryDevice(raw []byte) (DIMMInfo, bool) {
 // dmiID reads one /sys/class/dmi/id attribute, dropping placeholder values.
 func dmiID(name string) string {
 	v := strings.TrimSpace(readFile("/sys/class/dmi/id/" + name))
-	switch strings.ToLower(v) {
-	case "", "unknown", "to be filled by o.e.m.", "default string", "not specified", "system product name", "system manufacturer", "none":
+	if dmiPlaceholder(v) {
 		return ""
 	}
 	return v
+}
+
+// dmiPlaceholder reports the strings vendors leave in SMBIOS fields they
+// never programmed. "0123456789" is what Supermicro boards carry as the
+// product serial until the integrator writes one, so showing it as an asset
+// identifier would be worse than showing nothing.
+func dmiPlaceholder(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "unknown", "to be filled by o.e.m.", "default string", "not specified", "not available", "n/a", "none", "empty",
+		"system product name", "system manufacturer", "system serial number", "serial number", "system version",
+		"0", "0123456789", "1234567890", "00000000", "xxxxxxxx":
+		return true
+	}
+	return false
 }

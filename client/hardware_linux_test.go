@@ -229,3 +229,16 @@ func TestPCINameFallsBackToWellKnownAdapters(t *testing.T) {
 		t.Fatalf("unknown: %q", got)
 	}
 }
+
+func TestDMIPlaceholderDropsUnprogrammedSerials(t *testing.T) {
+	for _, v := range []string{"0123456789", "To Be Filled By O.E.M.", "System Serial Number", "Default string", " ", "0"} {
+		if !dmiPlaceholder(v) {
+			t.Fatalf("%q must be treated as a placeholder", v)
+		}
+	}
+	for _, v := range []string{"S123456X7890123", "VMware-42 1a", "C07XXXXXX"} {
+		if dmiPlaceholder(v) {
+			t.Fatalf("%q is a real value", v)
+		}
+	}
+}
