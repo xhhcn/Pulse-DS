@@ -337,8 +337,12 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
     if (c?.cores) topo.push(t('detail.cores', { n: c.cores }));
     if (c?.threads) topo.push(t('detail.threads', { n: c.threads }));
     if (topo.length) rows.push([t('hw.topology'), esc(topo.join(' · '))]);
-    if (cs.base) rows.push([t('hw.baseFreq'), esc(ghz(cs.base))]);
-    if (c?.max_mhz) rows.push([t('hw.maxFreq'), esc(ghz(Number(c.max_mhz)))]);
+    // A base clock is only worth a row when it differs from the maximum:
+    // platforms without a separate base rating (ARM boards, AMD under
+    // cpufreq) report the same figure for both.
+    const maxMhz = Number(c?.max_mhz) || 0;
+    if (cs.base && Math.abs(cs.base - maxMhz) >= 50) rows.push([t('hw.baseFreq'), esc(ghz(cs.base))]);
+    if (maxMhz) rows.push([t('hw.maxFreq'), esc(ghz(maxMhz))]);
     if (c?.mhz) rows.push([t('hw.currentFreq'), esc(ghz(Number(c.mhz)))]);
     if (c?.l3_cache) rows.push([t('hw.l3'), esc(cacheSize(String(c.l3_cache)))]);
     if (Array.isArray(hw.load) && hw.load.length >= 3) {
