@@ -100,10 +100,12 @@ sudo systemctl daemon-reload
 ```bash
 sudo systemctl stop pulse-ds-server && sudo systemctl disable pulse-ds-server && \
 sudo rm -f /usr/local/bin/pulse-ds-migrate /usr/local/bin/pulse-ds-backup /usr/local/bin/pulse-ds-restore && \
-sudo rm -f /etc/systemd/system/pulse-ds-server.service && \
-sudo rm -rf /opt/pulse-ds && \
-sudo systemctl daemon-reload
+sudo rm -f /opt/pulse-ds/pulse-ds-server /etc/systemd/system/pulse-ds-server.service && \
+sudo rm -rf /opt/pulse-ds/scripts /opt/pulse-ds/data && \
+sudo rmdir /opt/pulse-ds 2>/dev/null; sudo systemctl daemon-reload
 ```
+
+> The final `rmdir` removes `/opt/pulse-ds` only when it is empty, so a client installed on the same host keeps its files.
 
 ### Client
 
