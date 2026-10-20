@@ -10,7 +10,7 @@
 # bootstrap code) crashes with "qemu: uncaught target signal 4
 # (Illegal instruction) - core dumped". Pinning to the BUILD platform
 # avoids emulation entirely and makes arm64 builds as fast as amd64.
-FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-builder
 WORKDIR /build
 COPY server/web/package*.json ./
 RUN npm ci
@@ -21,7 +21,7 @@ RUN npm run build
 # every HTML page itself (nginx only proxies), so the security headers it
 # computes from the built HTML (hashed CSP, frame/referrer policies) apply in
 # Docker mode exactly as in standalone mode.
-FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS backend-builder
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /build
@@ -31,8 +31,10 @@ COPY server/*.go ./
 COPY --from=frontend-builder /build/dist ./web/dist
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o probe-server .
 
-# Stage 3: Final minimal image with nginx
-FROM alpine:3.19
+# Stage 3: Final minimal image with nginx. Keep this on a supported Alpine
+# branch: nginx in this image faces the network, and an end-of-life branch
+# stops receiving its security fixes (3.19 went EOL in November 2025).
+FROM alpine:3.24
 
 # Install nginx and supervisor
 RUN apk add --no-cache nginx supervisor && \

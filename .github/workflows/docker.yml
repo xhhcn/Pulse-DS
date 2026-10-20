@@ -94,9 +94,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          # Client builds only require Go 1.15, but we use 1.22 to match
-          # the server toolchain and allow rebuilding anything in-repo.
-          go-version: '1.22'
+          # Same toolchain as build-clients.yml: a supported line at its
+          # newest patch, and the last one that runs on macOS 12 Monterey.
+          go-version: '1.26.x'
+          check-latest: true
 
       - name: Build Client Binaries
         # Build the whole client package (`.`), not `main.go` alone.

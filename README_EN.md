@@ -8,7 +8,7 @@ Keeps the Pulse backend and data format, adds full hardware collection with heal
 - Repository: `xhhcn/Pulse-DS`
 - Docker image: `xhh1128/pulse-ds`
 - Data: an existing `metrics.db` works unchanged
-- Client: use the client from this repository (it collects hardware) on Linux / macOS / Windows; an upstream Pulse client still connects, but reports no hardware
+- Client: use the client from this repository (it collects hardware) on Linux (kernel 3.2+), macOS 12+ and Windows 10 / Server 2016+; an upstream Pulse client still connects, but reports no hardware
 - Coexists with Pulse: defaults are port `8018`, `/opt/pulse-ds` and the services `pulse-ds-server` / `pulse-ds-client`, so nothing overlaps with Pulse's `8008` / `/opt/pulse` / `pulse-server` on the same host
 
 ## What is collected

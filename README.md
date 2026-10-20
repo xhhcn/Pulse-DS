@@ -8,7 +8,7 @@ Pulse 的独立服务器（Dedicated Server）发行版。
 - 独立仓库：`xhhcn/Pulse-DS`
 - Docker 镜像：`xhh1128/pulse-ds`
 - 数据兼容：可直接复用原有 `metrics.db`
-- 客户端：使用本仓库的客户端（带硬件采集），支持 Linux / macOS / Windows；原 Pulse 客户端可接入，但没有硬件信息
+- 客户端：使用本仓库的客户端（带硬件采集），支持 Linux（内核 3.2+）、macOS 12+、Windows 10 / Server 2016+；原 Pulse 客户端可接入，但没有硬件信息
 - 与 Pulse 共存：默认端口 `8018`、目录 `/opt/pulse-ds`、服务 `pulse-ds-server` / `pulse-ds-client`，与 Pulse 的 `8008` / `/opt/pulse` / `pulse-server` 互不影响，可同机并存
 
 ## 采集内容

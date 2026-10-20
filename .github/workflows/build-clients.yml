@@ -43,7 +43,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          # A supported Go line, always at its newest patch: release binaries
+          # inherit every standard-library vulnerability of the toolchain that
+          # built them (Go 1.21 left 44 reachable ones in the agent). 1.26 is
+          # the last line that still runs on macOS 12 Monterey; 1.27 needs 13.
+          go-version: '1.26.x'
+          check-latest: true
 
       # NOTE: We build the whole package (`.`) rather than `main.go`. The
       # client is split across multiple source files (main.go +

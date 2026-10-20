@@ -5,7 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -620,7 +620,7 @@ func registerWithServer() {
 		if resp.StatusCode == http.StatusOK {
 			// Parse registration response to get initial TCPing targets for push mode
 			var regResp RegisterResponse
-			if body, readErr := ioutil.ReadAll(resp.Body); readErr == nil {
+			if body, readErr := io.ReadAll(resp.Body); readErr == nil {
 				if jsonErr := json.Unmarshal(body, &regResp); jsonErr == nil {
 					applyPushTCPingConfig(regResp.TCPingTargets, regResp.TCPingIntervalSecs)
 				}
@@ -631,7 +631,7 @@ func registerWithServer() {
 			return
 		} else {
 			// Read error response body for debugging
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
 			cancel()
 			log.Printf("❌ Registration failed (attempt %d/%d): HTTP %d - %s", i+1, maxRetries, resp.StatusCode, string(body))
@@ -712,13 +712,13 @@ func startPeriodicRegistration() {
 		// connection reuse. For 200, parse TCPing config; for other statuses, discard.
 		if resp.StatusCode == http.StatusOK {
 			var regResp RegisterResponse
-			if body, readErr := ioutil.ReadAll(resp.Body); readErr == nil {
+			if body, readErr := io.ReadAll(resp.Body); readErr == nil {
 				if jsonErr := json.Unmarshal(body, &regResp); jsonErr == nil {
 					applyPushTCPingConfig(regResp.TCPingTargets, regResp.TCPingIntervalSecs)
 				}
 			}
 		} else {
-			ioutil.ReadAll(resp.Body) //nolint:errcheck
+			io.ReadAll(resp.Body) //nolint:errcheck
 		}
 		resp.Body.Close()
 		cancel()
@@ -1060,16 +1060,16 @@ func startPushLoop() {
 				applyPushTCPingConfig(pushResp.TCPingTargets, pushResp.TCPingIntervalSecs)
 			} else {
 				// Decode failed — drain remainder to enable connection reuse
-				ioutil.ReadAll(resp.Body) //nolint:errcheck
+				io.ReadAll(resp.Body) //nolint:errcheck
 			}
 		} else if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized {
 			// Server doesn't know this client ID or secret is wrong.
 			// TCPing results are genuinely not needed if the server rejects us.
 			// Don't put them back to avoid infinite accumulation.
-			ioutil.ReadAll(resp.Body) //nolint:errcheck // drain to enable connection reuse
+			io.ReadAll(resp.Body) //nolint:errcheck // drain to enable connection reuse
 		} else {
 			// Transient server error — preserve TCPing results for next cycle
-			ioutil.ReadAll(resp.Body) //nolint:errcheck // drain to enable connection reuse
+			io.ReadAll(resp.Body) //nolint:errcheck // drain to enable connection reuse
 			if len(tcpingResults) > 0 {
 				pendingTCPingResultsMu.Lock()
 				combined := append(tcpingResults, pendingTCPingResults...)
@@ -1282,7 +1282,7 @@ func getOSInfo() OSInfo {
 			name = "Windows"
 			icon = "logos:microsoft-windows-icon"
 		default:
-			name = strings.Title(osName)
+			name = strings.ToUpper(osName[:1]) + osName[1:]
 			icon = "devicon:linux"
 		}
 
@@ -1293,7 +1293,7 @@ func getOSInfo() OSInfo {
 
 func detectLinuxDistro() string {
 	// Try to detect Linux distribution from /etc/os-release
-	data, err := ioutil.ReadFile("/etc/os-release")
+	data, err := os.ReadFile("/etc/os-release")
 	if err == nil {
 		content := string(data)
 		contentLower := strings.ToLower(content)
@@ -1359,7 +1359,7 @@ func detectLinuxDistro() string {
 	}
 
 	// Fallback: try reading /etc/issue
-	if data, err := ioutil.ReadFile("/etc/issue"); err == nil {
+	if data, err := os.ReadFile("/etc/issue"); err == nil {
 		content := strings.ToLower(string(data))
 		if strings.Contains(content, "ubuntu") {
 			return "Ubuntu"
@@ -1716,7 +1716,7 @@ func getPublicIPv4() string {
 			if resp.StatusCode != http.StatusOK {
 				return
 			}
-			body, err := ioutil.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
 			if err != nil {
 				return
 			}
@@ -1790,7 +1790,7 @@ func getPublicIPv6() string {
 			if resp.StatusCode != http.StatusOK {
 				return
 			}
-			body, err := ioutil.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
 			if err != nil {
 				return
 			}
@@ -1884,7 +1884,7 @@ func getCPUUsage() float64 {
 	defer cpuStatsMutex.Unlock()
 
 	// Read /proc/stat for accurate CPU usage (Linux)
-	data, err := ioutil.ReadFile("/proc/stat")
+	data, err := os.ReadFile("/proc/stat")
 	if err != nil {
 		// /proc/stat missing/unreadable — classic locked-down LXC symptom.
 		// Fall back to cgroup-reported CPU time, which isn't affected by
@@ -2044,7 +2044,7 @@ func getMemoryUsage() float64 {
 	}
 
 	// Step 2 — /proc/meminfo.
-	data, err := ioutil.ReadFile("/proc/meminfo")
+	data, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		if u, t, ok := resolveMemoryStats(); ok && t > 0 {
 			return clamp(float64(u) / float64(t) * 100.0)
@@ -2237,7 +2237,7 @@ func getSystemUptime() int64 {
 	}
 
 	// Try to read from /proc/uptime (Linux)
-	data, err := ioutil.ReadFile("/proc/uptime")
+	data, err := os.ReadFile("/proc/uptime")
 	if err == nil {
 		// Format: "12345.67 1234.56" (uptime in seconds, idle time)
 		fields := strings.Fields(string(data))
@@ -2347,7 +2347,7 @@ func getNetworkStats() (inMBps, outMBps float64, totalRxBytes, totalTxBytes uint
 
 	// Read current network stats from /proc/net/dev (Linux)
 	currentStats := make(map[string]netInterfaceStats)
-	data, err := ioutil.ReadFile("/proc/net/dev")
+	data, err := os.ReadFile("/proc/net/dev")
 	if err != nil {
 		return 0.0, 0.0, 0, 0
 	}
@@ -2485,7 +2485,7 @@ func getCgroupCPUCount() int {
 
 	// ── cpu bandwidth ─────────────────────────────────────────────────
 	// cgroup v2 — single file "quota period"; "max" means unlimited.
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/cpu.max"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/cpu.max"); err == nil {
 		parts := strings.Fields(strings.TrimSpace(string(data)))
 		if len(parts) >= 2 && parts[0] != "max" {
 			var quota, period int64
@@ -2500,8 +2500,8 @@ func getCgroupCPUCount() int {
 		}
 	} else {
 		// cgroup v1 — quota and period in separate files.
-		quotaData, qErr := ioutil.ReadFile("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
-		periodData, pErr := ioutil.ReadFile("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
+		quotaData, qErr := os.ReadFile("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
+		periodData, pErr := os.ReadFile("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
 		if qErr == nil && pErr == nil {
 			var quota, period int64
 			fmt.Sscanf(strings.TrimSpace(string(quotaData)), "%d", &quota)
@@ -2525,7 +2525,7 @@ func getCgroupCPUCount() int {
 		"/sys/fs/cgroup/cpuset.cpus",           // v2 fallback
 	}
 	for _, p := range cpusetPaths {
-		if data, err := ioutil.ReadFile(p); err == nil {
+		if data, err := os.ReadFile(p); err == nil {
 			if n := countCPUList(string(data)); n > 0 {
 				fromCpuset = n
 				break
@@ -2574,7 +2574,7 @@ var (
 // or the cpuacct controller is not mounted.
 func readCgroupCPUNanos() (uint64, bool) {
 	// cgroup v2 — unified hierarchy.
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/cpu.stat"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/cpu.stat"); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
 			fields := strings.Fields(line)
 			if len(fields) == 2 && fields[0] == "usage_usec" {
@@ -2585,13 +2585,13 @@ func readCgroupCPUNanos() (uint64, bool) {
 		}
 	}
 	// cgroup v1 — cpuacct controller.
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/cpuacct/cpuacct.usage"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/cpuacct/cpuacct.usage"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
 			return v, true
 		}
 	}
 	// cgroup v1 "legacy" — some distros mount cpuacct under cpu,cpuacct.
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/cpu,cpuacct/cpuacct.usage"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/cpu,cpuacct/cpuacct.usage"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
 			return v, true
 		}
@@ -2696,7 +2696,7 @@ func getCgroupCPUUsage() (float64, bool) {
 // prefixed with "total_" in hierarchical accounting. Reading them
 // independently lets us tolerate one being absent (older kernels).
 func cgroupMemoryReclaimable(statPath string) uint64 {
-	data, err := ioutil.ReadFile(statPath)
+	data, err := os.ReadFile(statPath)
 	if err != nil {
 		return 0
 	}
@@ -2764,13 +2764,13 @@ func getCgroupMemoryStats() (used, total uint64, ok bool) {
 	}
 
 	// ── cgroup v2 (unified hierarchy) ────────────────────────────────
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.max"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory.max"); err == nil {
 		if t, tok := readUint(string(data)); tok {
 			total = t
 		}
 	}
 	if total > 0 {
-		if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.current"); err == nil {
+		if data, err := os.ReadFile("/sys/fs/cgroup/memory.current"); err == nil {
 			if u, uok := readUint(string(data)); uok {
 				used = u
 			}
@@ -2789,13 +2789,13 @@ func getCgroupMemoryStats() (used, total uint64, ok bool) {
 	// limit_in_bytes reports a very large sentinel (~9223372036854771712, i.e.
 	// PAGE_COUNTER_MAX * PAGE_SIZE) when no limit is set — treat that as
 	// "unlimited" by comparing against host total if available, else ok=false.
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.limit_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.limit_in_bytes"); err == nil {
 		if t, tok := readUint(string(data)); tok && t > 0 && t < (1<<62) {
 			total = t
 		}
 	}
 	if total > 0 {
-		if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.usage_in_bytes"); err == nil {
+		if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.usage_in_bytes"); err == nil {
 			if u, uok := readUint(string(data)); uok {
 				used = u
 			}
@@ -2816,7 +2816,7 @@ func getCgroupMemoryStats() (used, total uint64, ok bool) {
 // containers — useful when combined with a host-level total from sysinfo.
 func readCgroupMemoryCurrent() (uint64, bool) {
 	// cgroup v2
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.current"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory.current"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
 			used := v
 			if r := cgroupMemoryReclaimable("/sys/fs/cgroup/memory.stat"); r > 0 && r < used {
@@ -2826,7 +2826,7 @@ func readCgroupMemoryCurrent() (uint64, bool) {
 		}
 	}
 	// cgroup v1
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.usage_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.usage_in_bytes"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
 			used := v
 			if r := cgroupMemoryReclaimable("/sys/fs/cgroup/memory/memory.stat"); r > 0 && r < used {
@@ -2898,7 +2898,7 @@ func parseProxmoxSize(s string) uint64 {
 //	swap: 512
 //	unprivileged: 1
 func readProxmoxLXCConfig() (proxmoxLXCConfig, bool) {
-	data, err := ioutil.ReadFile("/etc/vzdump/pct.conf")
+	data, err := os.ReadFile("/etc/vzdump/pct.conf")
 	if err != nil {
 		return proxmoxLXCConfig{}, false
 	}
@@ -2982,13 +2982,13 @@ func proxmoxLXCConfigCached() (proxmoxLXCConfig, bool) {
 // want to see on a rootless/unbounded container.
 func readCgroupMemoryPeak() (uint64, bool) {
 	// cgroup v2
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.peak"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory.peak"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil && v > 0 {
 			return v, true
 		}
 	}
 	// cgroup v1
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.max_usage_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.max_usage_in_bytes"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil && v > 0 {
 			return v, true
 		}
@@ -3155,7 +3155,7 @@ func resolveSwapStats() (used, total uint64, ok bool) {
 	// of limit. Reliable inside LXC when /proc/meminfo is masked.
 	var cgSwapUsed uint64
 	var cgSwapOK bool
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.swap.current"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory.swap.current"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
 			cgSwapUsed = v
 			cgSwapOK = true
@@ -3220,13 +3220,13 @@ func getCgroupSwapStats() (used, total uint64, ok bool) {
 	}
 
 	// cgroup v2: memory.swap.max / memory.swap.current
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.swap.max"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory.swap.max"); err == nil {
 		if t, tok := readUint(string(data)); tok {
 			total = t
 		}
 	}
 	if total > 0 {
-		if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.swap.current"); err == nil {
+		if data, err := os.ReadFile("/sys/fs/cgroup/memory.swap.current"); err == nil {
 			if u, uok := readUint(string(data)); uok {
 				used = u
 			}
@@ -3237,22 +3237,22 @@ func getCgroupSwapStats() (used, total uint64, ok bool) {
 	// cgroup v1: memsw.limit_in_bytes is combined (memory + swap). Swap-only
 	// limit = memsw_limit - memory_limit; swap-only used = memsw_usage - memory_usage.
 	var memswLimit, memswUsage, memLimit, memUsage uint64
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.memsw.limit_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.memsw.limit_in_bytes"); err == nil {
 		if v, ok := readUint(string(data)); ok && v < (1<<62) {
 			memswLimit = v
 		}
 	}
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.memsw.usage_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.memsw.usage_in_bytes"); err == nil {
 		if v, ok := readUint(string(data)); ok {
 			memswUsage = v
 		}
 	}
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.limit_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.limit_in_bytes"); err == nil {
 		if v, ok := readUint(string(data)); ok && v < (1<<62) {
 			memLimit = v
 		}
 	}
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.usage_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.usage_in_bytes"); err == nil {
 		if v, ok := readUint(string(data)); ok {
 			memUsage = v
 		}
@@ -3292,7 +3292,7 @@ func isLinuxContainer() bool {
 	}
 	containerHints := []string{"/docker", "/lxc", "lxc.payload", "/kubepods", "/containerd", "/podman", "libpod"}
 	for _, p := range []string{"/proc/1/cgroup", "/proc/self/cgroup"} {
-		data, err := ioutil.ReadFile(p)
+		data, err := os.ReadFile(p)
 		if err != nil {
 			continue
 		}
@@ -3599,7 +3599,7 @@ func getCPUModel() string {
 
 	// Raw ARM-style /proc/cpuinfo probing as a secondary fallback.
 	if model == "" {
-		if data, err := ioutil.ReadFile("/proc/cpuinfo"); err == nil {
+		if data, err := os.ReadFile("/proc/cpuinfo"); err == nil {
 			// Walk the file once, pick the first non-empty match among the
 			// candidate keys in priority order.
 			armKeys := []string{"Hardware", "Model", "Processor", "CPU part"}
@@ -3630,7 +3630,7 @@ func getCPUModel() string {
 	// ARM SBC fallback — Raspberry Pi, Rockchip boards, etc. expose the
 	// board / SoC model as a NUL-terminated string in the device-tree.
 	if model == "" {
-		if data, err := ioutil.ReadFile("/sys/firmware/devicetree/base/model"); err == nil {
+		if data, err := os.ReadFile("/sys/firmware/devicetree/base/model"); err == nil {
 			s := strings.TrimRight(strings.TrimSpace(string(data)), "\x00")
 			if s != "" {
 				model = s
@@ -3649,7 +3649,7 @@ func getCPUModel() string {
 			"/sys/devices/virtual/dmi/id/sys_vendor",
 			"/sys/devices/virtual/dmi/id/board_name",
 		} {
-			if data, err := ioutil.ReadFile(p); err == nil {
+			if data, err := os.ReadFile(p); err == nil {
 				s := strings.TrimSpace(string(data))
 				// Common uninformative placeholders put there by cloud /
 				// virtualisation vendors — reject rather than display.
@@ -3729,7 +3729,7 @@ func getCPUModel() string {
 			"/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq",
 			"/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq",
 		} {
-			if data, err := ioutil.ReadFile(p); err == nil {
+			if data, err := os.ReadFile(p); err == nil {
 				if khz, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil && khz > 0 {
 					speedLinux = fmt.Sprintf("%.2f", float64(khz)/1e6)
 					break
@@ -4151,7 +4151,7 @@ func getMemoryInfo() string {
 
 	// Step 2 — /proc/meminfo. Works for bare metal and for containers
 	// where lxcfs is alive and properly virtualising meminfo.
-	data, err := ioutil.ReadFile("/proc/meminfo")
+	data, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		// Step 3a — /proc/meminfo unreadable (lxcfs ENOTCONN). Fall back
 		// to cgroup.current + sysinfo host total. This is the best we
@@ -4241,7 +4241,7 @@ func getSwapInfo() string {
 	// /proc is unreadable (lxcfs ENOTCONN). We always return something
 	// ("0 B / 0 B" at worst) so the frontend can distinguish "no swap
 	// configured" from "no data yet".
-	data, err := ioutil.ReadFile("/proc/meminfo")
+	data, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		if u, t, ok := resolveSwapStats(); ok {
 			if t > 0 {

@@ -6,7 +6,6 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -49,7 +48,7 @@ func collectHardware() *HardwareInfo {
 // ---------------------------------------------------------------- sysfs helpers
 
 func readFile(path string) string {
-	b, err := ioutil.ReadFile(path)
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return ""
 	}
@@ -406,7 +405,7 @@ func collectSensors() []Sensor {
 	hwmons, _ := filepath.Glob("/sys/class/hwmon/hwmon*")
 	for _, dir := range hwmons {
 		chip := readFile(filepath.Join(dir, "name"))
-		entries, err := ioutil.ReadDir(dir)
+		entries, err := os.ReadDir(dir)
 		if err != nil {
 			continue
 		}
@@ -465,7 +464,7 @@ func collectSensors() []Sensor {
 // ---------------------------------------------------------------- network
 
 func collectNetInterfaces(now time.Time) []NetInterface {
-	entries, err := ioutil.ReadDir("/sys/class/net")
+	entries, err := os.ReadDir("/sys/class/net")
 	if err != nil {
 		return nil
 	}
