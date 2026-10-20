@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func f64(v float64) *float64 { return &v }
@@ -172,5 +173,56 @@ func TestErrorCountersAlertOnGrowthNotOnLifetimeTotals(t *testing.T) {
 	carryCounters(sixth, fifth, now.Add(23*time.Minute))
 	if sixth.Network[0].ErrRecent != 0 || sixth.Network[0].ErrTrack.Base != 5 || sixth.Memory.ECCRecent != 0 {
 		t.Fatalf("counter reset: %+v %+v", sixth.Network[0], sixth.Memory)
+	}
+}
+
+func TestBoundHardwareTrimsListsAndRejectsOversizedSnapshots(t *testing.T) {
+	// A real large machine passes untouched.
+	real := &HardwareInfo{Disks: make([]DiskHardware, 90), Sensors: make([]Sensor, 200), Memory: &MemoryHardware{DIMMs: make([]DIMMInfo, 48)}}
+	if !boundHardware(real) || len(real.Disks) != 90 || len(real.Sensors) != 200 || len(real.Memory.DIMMs) != 48 {
+		t.Fatalf("a large but genuine machine must be kept as reported")
+	}
+	// Absurd lists are trimmed to their limits and the snapshot is kept.
+	big := &HardwareInfo{Sensors: make([]Sensor, 9000), Disks: make([]DiskHardware, 5000), Load: []float64{1, 2, 3, 4, 5}}
+	for i := range big.Sensors {
+		big.Sensors[i] = Sensor{Label: "t", Kind: "temp", Value: 40}
+	}
+	if !boundHardware(big) {
+		t.Fatalf("trimmed snapshot should fit")
+	}
+	if len(big.Sensors) != maxHWSensors || len(big.Disks) != maxHWDisks || len(big.Load) != 3 {
+		t.Fatalf("lists not trimmed: sensors=%d disks=%d load=%d", len(big.Sensors), len(big.Disks), len(big.Load))
+	}
+	// Giant strings survive list trimming, so the size ceiling has to catch them.
+	huge := &HardwareInfo{System: &SystemHardware{Product: strings.Repeat("x", maxHardwareBytes)}}
+	if boundHardware(huge) {
+		t.Fatalf("an oversized snapshot must be rejected")
+	}
+	if !boundHardware(nil) {
+		t.Fatalf("no snapshot is fine")
+	}
+}
+
+func TestApplyHardwareKeepsPreviousSnapshotWhenIncomingIsOversized(t *testing.T) {
+	prev := &SystemMetric{ID: "a", Hardware: &HardwareInfo{CollectedAt: time.Now(), System: &SystemHardware{Product: "Super Server"}}}
+	m := &SystemMetric{ID: "a"}
+	applyHardware(m, &HardwareInfo{System: &SystemHardware{Product: strings.Repeat("x", maxHardwareBytes)}}, prev)
+	if m.Hardware == nil || m.Hardware.System.Product != "Super Server" {
+		t.Fatalf("oversized push must not replace the stored snapshot: %+v", m.Hardware)
+	}
+}
+
+func TestBoundAgentFieldsClipsOversizedStringsOnRuneBoundaries(t *testing.T) {
+	m := &SystemMetric{
+		OS:       strings.Repeat("o", 300000),
+		CPUModel: strings.Repeat("中", 500), // multi-byte: must not be cut mid-character
+		IPv4:     "203.0.113.7",
+	}
+	boundAgentFields(m)
+	if len([]rune(m.OS)) != 128 || len([]rune(m.CPUModel)) != 192 || m.IPv4 != "203.0.113.7" {
+		t.Fatalf("os=%d cpu=%d ipv4=%q", len([]rune(m.OS)), len([]rune(m.CPUModel)), m.IPv4)
+	}
+	if !utf8.ValidString(m.CPUModel) {
+		t.Fatalf("clipping produced invalid UTF-8")
 	}
 }

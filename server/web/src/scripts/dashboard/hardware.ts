@@ -183,7 +183,9 @@ export function systemRows(s: Server): Array<[string, string]> {
   if (!hw) {
     const k = kernelRow(s);
     if (k) rows.push(k);
-    if (s.agentVersion) rows.push([t('detail.agent'), esc(s.agentVersion)]);
+    // The add dialog stores a placeholder version; it is only real once the
+    // agent has pushed.
+    if (s.agentVersion && s.reported) rows.push([t('detail.agent'), esc(s.agentVersion)]);
   }
   return rows;
 }
@@ -196,6 +198,7 @@ export function systemRows(s: Server): Array<[string, string]> {
 // wants one reading per component with the BMC as the authority, so the
 // panel folds the duplicates away (they stay one click behind "more") and
 // collapses the voltage rails to a summary unless one is out of range.
+const DIMMS_SHOWN = 8;
 const GENERIC_TEMP_CHIPS = new Set(['acpitz', 'thermal', 'acpi']);
 const DRIVE_TEMP_CHIPS = new Set(['nvme', 'drivetemp']);
 
@@ -393,7 +396,17 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
       else if (withSpeed) widths = ['14%', '11%', '10%', '37%', '18%', '10%'];
       else if (withPart) widths = ['16%', '12%', '12%', '20%', '30%', '10%'];
       else widths = ['24%', '20%', '20%', '24%', '12%'];
-      modules = `<div class="${rows.length ? 'mt-3' : ''}">${table(head, trs, widths)}</div>`;
+      // A dual-socket board lists 16 to 32 identical modules, which pushed
+      // disks and NICs a screen further down. The rows carry inventory, not
+      // health (ECC errors are counted per controller, above), so long lists
+      // fold to the first few; it never folds away just one or two rows.
+      const fold = trs.length > DIMMS_SHOWN + 2 && !open.has('dimms');
+      const shown = fold ? trs.slice(0, DIMMS_SHOWN) : trs;
+      const toggle =
+        trs.length > DIMMS_SHOWN + 2
+          ? `<div class="mt-2">${sensorToggle('dimms', !fold, fold ? t('detail.moreIssues', { n: trs.length - DIMMS_SHOWN }) : t('detail.lessIssues'))}</div>`
+          : '';
+      modules = `<div class="${rows.length ? 'mt-3' : ''}">${table(head, shown, widths)}${toggle}</div>`;
     }
     if (rows.length || modules) out.push(section('hw.memory', 'memory', dimms.length, kv(rows) + modules));
   }

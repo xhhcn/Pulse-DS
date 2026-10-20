@@ -35,6 +35,8 @@ export interface Server {
   diskInfo: string;
   agentVersion: string;
   updatedAt: string;
+  /** False for a system that was added in the admin page but whose agent has never pushed. */
+  reported: boolean;
   hideTcping: boolean;
   hardware: any | null;
   hwSig: string;
@@ -96,6 +98,9 @@ export function normalize(raw: any): Server {
     diskInfo: String(raw?.disk_info || ''),
     agentVersion: String(raw?.agent_version || ''),
     updatedAt: String(raw?.updated_at || ''),
+    // The server stores Go's zero time ("0001-01-01T00:00:00Z") until the
+    // first push, which parses to a negative timestamp.
+    reported: Date.parse(String(raw?.updated_at || '')) > 0,
     hideTcping: raw?.hide_tcping === true,
     hardware: hw,
     hwSig: hw ? `${health}|${hw.collected_at || ''}|${issues.join(';')}` : '',

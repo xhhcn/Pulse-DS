@@ -277,17 +277,23 @@ export class DetailDialog {
     const zh = getLang() === 'zh';
     this.q('dot').className = `dot ${s.online ? 'dot-online' : 'dot-offline'}`;
     this.q('name').textContent = s.name;
+    this.q('name').title = s.name;
     this.q('health').innerHTML = healthPill(s, 'md');
     this.q('type').hidden = true;
     const status = s.online ? `<span class="text-[var(--ok)]">${esc(t('common.online'))}</span>` : `<span class="text-[var(--crit)]">${esc(t('common.offline'))}</span>`;
     const typeText = s.type === 'DS' ? t('detail.type.DS') : s.type === 'VPS' ? t('detail.type.VPS') : s.type;
+    // Only what the host has actually told us: a system added in the admin
+    // page but never reached by its agent would otherwise read
+    // "offline — — 0 h updated —", which says nothing.
     this.q('meta').innerHTML = [
       status,
       typeText ? `<span>${esc(typeText)}</span>` : '',
-      osHtml(s, true),
-      locationHtml(s, true),
-      `<span title="${attr(t('detail.uptime'))}">${esc(uptimeLong(s.uptime, zh))}</span>`,
-      `<span title="${attr(s.updatedAt)}">${esc(t('detail.updated'))} ${esc(relativeAgo(s.updatedAt, zh))}</span>`,
+      s.os || s.osIcon ? osHtml(s, true) : '',
+      s.location ? locationHtml(s, true) : '',
+      s.reported ? `<span title="${attr(t('detail.uptime'))}">${esc(uptimeLong(s.uptime, zh))}</span>` : '',
+      s.reported
+        ? `<span title="${attr(s.updatedAt)}">${esc(t('detail.updated'))} ${esc(relativeAgo(s.updatedAt, zh))}</span>`
+        : `<span class="t-3">${esc(t('admin.noAgent'))}</span>`,
     ].filter(Boolean).join('');
     const tags = this.q('tags');
     const shown = this.host.showTags() ? s.tags : [];
@@ -414,9 +420,11 @@ export class DetailDialog {
 <div class="modal-panel is-xl" role="dialog" aria-modal="true" aria-labelledby="server-dialog-title">
   <div class="modal-head" data-d="head">
     <div class="min-w-0 flex-1">
-      <div class="flex items-center gap-2.5 flex-wrap min-w-0">
-        <span class="dot" data-d="dot"></span>
-        <h2 class="modal-title truncate max-w-full" id="server-dialog-title" data-d="name"></h2>
+      <div class="flex items-center gap-x-2.5 gap-y-1 flex-wrap min-w-0">
+        <div class="flex items-center gap-2.5 min-w-0 max-w-full">
+          <span class="dot" data-d="dot"></span>
+          <h2 class="modal-title truncate min-w-0" id="server-dialog-title" data-d="name"></h2>
+        </div>
         <span data-d="health"></span>
         <span data-d="type" hidden></span>
       </div>

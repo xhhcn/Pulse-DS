@@ -3353,7 +3353,46 @@ func isPrivateIP(ip net.IP) bool {
 // metric being written and derives the health verdict from it. An agent that
 // sends no snapshot keeps the previously stored one (older agents, or a
 // transient collector failure) so the dashboard never flickers to "unknown".
+// clipRunes shortens s to at most n characters without splitting a UTF-8
+// sequence.
+func clipRunes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
+}
+
+// boundAgentFields caps the descriptive strings an agent reports. Like the
+// hardware snapshot they are broadcast to every viewer on each push, and the
+// request size limit alone still let one agent store three 300 KB strings.
+// The limits are far above anything a real system reports.
+func boundAgentFields(m *SystemMetric) {
+	m.IPv4 = clipRunes(m.IPv4, 64)
+	m.IPv6 = clipRunes(m.IPv6, 64)
+	m.Time = clipRunes(m.Time, 32)
+	m.Location = clipRunes(m.Location, 64)
+	m.VirtualizationType = clipRunes(m.VirtualizationType, 32)
+	m.OS = clipRunes(m.OS, 128)
+	m.OSIcon = clipRunes(m.OSIcon, 64)
+	m.CPUModel = clipRunes(m.CPUModel, 192)
+	m.MemoryInfo = clipRunes(m.MemoryInfo, 96)
+	m.SwapInfo = clipRunes(m.SwapInfo, 96)
+	m.DiskInfo = clipRunes(m.DiskInfo, 96)
+	m.AgentVersion = clipRunes(m.AgentVersion, 32)
+}
+
+// applyHardware runs on every write that carries agent data (push, poll and
+// a client-originated POST), which makes it the one place to bound it.
 func applyHardware(metric *SystemMetric, incoming *HardwareInfo, existing *SystemMetric) {
+	boundAgentFields(metric)
+	if incoming != nil && !boundHardware(incoming) {
+		log.Printf("⚠️  Hardware snapshot from %s exceeds %d KB after trimming; keeping the previous one", metric.ID, maxHardwareBytes>>10)
+		incoming = nil
+	}
 	if incoming != nil {
 		if incoming.CollectedAt.IsZero() {
 			incoming.CollectedAt = time.Now().UTC()

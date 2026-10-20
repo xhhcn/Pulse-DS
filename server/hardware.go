@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -28,6 +29,59 @@ type HardwareInfo struct {
 	Network     []NetInterface   `json:"network,omitempty"`
 	GPUs        []GPUInfo        `json:"gpus,omitempty"`
 	System      *SystemHardware  `json:"system,omitempty"`
+}
+
+// Agents describe their own hardware, but they must not decide how large
+// every viewer's snapshot gets: the snapshot is broadcast to all browsers on
+// each push, so one compromised or broken agent could otherwise inflate it
+// for everyone (a 1 MB push of sensor rows made the public list 15x larger).
+// The list limits sit well above what real machines report (a 90-bay JBOD,
+// a 4-socket board, an IPMI sensor table), and the size ceiling catches
+// oversized strings that list limits alone would let through.
+const (
+	maxHWDisks       = 128
+	maxHWFilesystems = 128
+	maxHWRAID        = 64
+	maxHWZFS         = 64
+	maxHWSensors     = 384
+	maxHWNetwork     = 64
+	maxHWGPUs        = 32
+	maxHWDIMMs       = 128
+	maxHWAdapters    = 16
+	maxHWLoad        = 3
+	maxHardwareBytes = 192 << 10
+)
+
+func clampSlice[T any](v []T, n int) []T {
+	if len(v) > n {
+		return v[:n]
+	}
+	return v
+}
+
+// boundHardware trims every list to its limit and reports whether the result
+// is small enough to keep. A snapshot that is still oversized afterwards is
+// dropped by the caller, which keeps the previous one.
+func boundHardware(hw *HardwareInfo) bool {
+	if hw == nil {
+		return true
+	}
+	hw.Load = clampSlice(hw.Load, maxHWLoad)
+	hw.Disks = clampSlice(hw.Disks, maxHWDisks)
+	hw.Filesystems = clampSlice(hw.Filesystems, maxHWFilesystems)
+	hw.RAID = clampSlice(hw.RAID, maxHWRAID)
+	hw.ZFS = clampSlice(hw.ZFS, maxHWZFS)
+	hw.Sensors = clampSlice(hw.Sensors, maxHWSensors)
+	hw.Network = clampSlice(hw.Network, maxHWNetwork)
+	hw.GPUs = clampSlice(hw.GPUs, maxHWGPUs)
+	if hw.Memory != nil {
+		hw.Memory.DIMMs = clampSlice(hw.Memory.DIMMs, maxHWDIMMs)
+	}
+	if hw.System != nil {
+		hw.System.DisplayAdapters = clampSlice(hw.System.DisplayAdapters, maxHWAdapters)
+	}
+	b, err := json.Marshal(hw)
+	return err == nil && len(b) <= maxHardwareBytes
 }
 
 type CPUHardware struct {

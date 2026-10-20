@@ -6,7 +6,7 @@ import type { Server } from './state';
 
 const GRADIENTS: Record<string, string> = {
   r: 'linear-gradient(90deg,#dc2626 0%,#ea580c 50%,#db2777 100%)',
-  y: 'linear-gradient(90deg,#ca8a04 0%,#16a34a 50%,#0d9488 100%)',
+  y: 'linear-gradient(90deg,#a3770a 0%,#16a34a 50%,#0d9488 100%)',
   b: 'linear-gradient(90deg,#2563eb 0%,#9333ea 50%,#c026d3 100%)',
 };
 
