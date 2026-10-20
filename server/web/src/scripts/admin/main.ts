@@ -244,6 +244,30 @@ async function loadOnce(): Promise<void> {
 /* ------------------------------------------------------------------ */
 let dragging: HTMLElement | null = null;
 let dropTarget: { el: HTMLElement; before: boolean } | null = null;
+let dragWatchdog = 0;
+
+/**
+ * End the drag and let the held snapshots through. Repaints are suspended for
+ * as long as a row is being dragged, so this has to run even when the browser
+ * never delivers dragend (the pointer released outside the window, the tab
+ * lost focus mid-drag): without the watchdog the list would sit frozen on
+ * stale data until the admin reloaded the page.
+ */
+function endDrag(): void {
+  window.clearTimeout(dragWatchdog);
+  dragWatchdog = 0;
+  dragging?.classList.remove('dragging');
+  dragging = null;
+  dropTarget = null;
+  clearDropMarks();
+  // A reorder that is still saving keeps its own hold; saveOrder reloads when
+  // it finishes.
+  if (!orderSaving && heldSnapshot) {
+    systems = heldSnapshot;
+    heldSnapshot = null;
+    paint();
+  }
+}
 
 function clearDropMarks(): void {
   list.querySelectorAll('.drop-before, .drop-after').forEach((el) => el.classList.remove('drop-before', 'drop-after'));
@@ -266,20 +290,10 @@ function wireDrag(el: HTMLElement): void {
     el.classList.add('dragging');
     e.dataTransfer?.setData('text/plain', el.dataset.id || '');
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+    window.clearTimeout(dragWatchdog);
+    dragWatchdog = window.setTimeout(endDrag, 30000);
   });
-  el.addEventListener('dragend', () => {
-    el.classList.remove('dragging');
-    dragging = null;
-    dropTarget = null;
-    clearDropMarks();
-    // Catch up on the snapshots held during the drag. A reorder that is still
-    // saving keeps its own hold; saveOrder reloads when it finishes.
-    if (!orderSaving && heldSnapshot) {
-      systems = heldSnapshot;
-      heldSnapshot = null;
-      paint();
-    }
-  });
+  el.addEventListener('dragend', endDrag);
   el.addEventListener('dragover', (e) => {
     if (!dragging || dragging === el) return;
     e.preventDefault();
