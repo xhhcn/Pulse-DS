@@ -213,7 +213,12 @@ function paint(): void {
 
 function ingest(data: any[]): void {
   if (!Array.isArray(data)) return;
-  if (orderSaving) {
+  // A repaint re-creates every row whose signature changed, and the live
+  // traffic counters are part of that signature, so on a busy list rows are
+  // replaced every few seconds. Doing that mid-drag swaps the very elements
+  // the drag is holding on to, so hold the snapshot until the pointer is up
+  // (dragend applies it) exactly as a pending order save does.
+  if (orderSaving || dragging) {
     heldSnapshot = data;
     return;
   }
@@ -267,6 +272,13 @@ function wireDrag(el: HTMLElement): void {
     dragging = null;
     dropTarget = null;
     clearDropMarks();
+    // Catch up on the snapshots held during the drag. A reorder that is still
+    // saving keeps its own hold; saveOrder reloads when it finishes.
+    if (!orderSaving && heldSnapshot) {
+      systems = heldSnapshot;
+      heldSnapshot = null;
+      paint();
+    }
   });
   el.addEventListener('dragover', (e) => {
     if (!dragging || dragging === el) return;
@@ -284,6 +296,11 @@ function wireDrag(el: HTMLElement): void {
     if (!dragging || !dropTarget || dragging === el) return;
     const target = dropTarget;
     clearDropMarks();
+    // Both rows must still be in the list. If either was replaced or removed
+    // (a delete landing mid-drag, say), inserting the detached node would put
+    // a second copy of that server on screen and send a duplicated id to the
+    // order endpoint.
+    if (dragging.parentNode !== list || target.el.parentNode !== list) return;
     list.insertBefore(dragging, target.before ? target.el : target.el.nextSibling);
     const order = Array.from(list.children).map((c) => (c as HTMLElement).dataset.id || '').filter(Boolean);
     saveOrder(order);

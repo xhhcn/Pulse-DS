@@ -90,7 +90,58 @@ export function icon(name: string, size = 16, cls = ''): string {
 const svgCache = new Map<string, string | null>();
 const inflight = new Map<string, Promise<string | null>>();
 
+/*
+ * Icons also survive in localStorage. Without that, every page load refetches
+ * every flag and logo from the public CDN, so a dashboard that is kept open
+ * and reloaded all day eventually gets rate-limited (the 429 carries no CORS
+ * header, so the browser reports it as a cross-origin failure) and the whole
+ * row of flags disappears. Only successful fetches are stored: a miss must
+ * never be remembered, or one bad afternoon would blank an icon for weeks.
+ */
+const STORE_KEY = 'pulse-icons-v1';
+const STORE_TTL = 30 * 24 * 3600 * 1000;
+const STORE_MAX = 300;
+type StoredIcon = { svg: string; t: number };
+let store: Record<string, StoredIcon> | null = null;
+
+function readStore(): Record<string, StoredIcon> {
+  if (store) return store;
+  store = {};
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, StoredIcon>;
+      const now = Date.now();
+      for (const [name, entry] of Object.entries(parsed)) {
+        if (entry && typeof entry.svg === 'string' && typeof entry.t === 'number' && now - entry.t < STORE_TTL) {
+          store[name] = entry;
+          // Seed the in-memory cache so the first render is synchronous.
+          if (!svgCache.has(name)) svgCache.set(name, entry.svg);
+        }
+      }
+    }
+  } catch {
+    // Private windows, disabled site data, corrupt entry: the CDN still works.
+  }
+  return store;
+}
+
+function persistIcon(name: string, svg: string): void {
+  try {
+    const s = readStore();
+    s[name] = { svg, t: Date.now() };
+    const names = Object.keys(s);
+    if (names.length > STORE_MAX) {
+      names.sort((a, b) => s[a].t - s[b].t).slice(0, names.length - STORE_MAX).forEach((n) => delete s[n]);
+    }
+    localStorage.setItem(STORE_KEY, JSON.stringify(s));
+  } catch {
+    // Over quota or unavailable: the in-memory cache still serves this page.
+  }
+}
+
 export function cachedSvg(name: string): string | null | undefined {
+  readStore();
   return svgCache.get(name);
 }
 
@@ -99,6 +150,7 @@ const ICON_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function fetchSvg(name: string): Promise<string | null> {
   if (!ICON_NAME.test(name)) return Promise.resolve(null);
+  readStore();
   if (svgCache.has(name)) return Promise.resolve(svgCache.get(name) ?? null);
   const pending = inflight.get(name);
   if (pending) return pending;
@@ -110,7 +162,12 @@ export function fetchSvg(name: string): Promise<string | null> {
       const timer = window.setTimeout(() => ac.abort(), 5000);
       let res: Response;
       try {
-        res = await fetch(`https://api.iconify.design/${encodeURI(name)}.svg?height=32`, { signal: ac.signal });
+        // The API serves "prefix/name.svg". It used to accept "prefix:name.svg"
+        // as well; that form now returns 404, which silently blanked every
+        // country flag and OS logo. ICON_NAME guarantees one colon and only
+        // [a-z0-9-] around it, so the split needs no further escaping.
+        const [prefix, glyph] = name.split(':');
+        res = await fetch(`https://api.iconify.design/${prefix}/${glyph}.svg?height=32`, { signal: ac.signal });
       } finally {
         window.clearTimeout(timer);
       }
@@ -130,6 +187,7 @@ export function fetchSvg(name: string): Promise<string | null> {
       text = text.replace(/\swidth="[^"]*"/, '').replace(/\sheight="[^"]*"/, '');
       const clean = sanitizeSvg(text);
       svgCache.set(name, clean);
+      if (clean) persistIcon(name, clean);
       return clean;
     } catch {
       svgCache.set(name, null);
