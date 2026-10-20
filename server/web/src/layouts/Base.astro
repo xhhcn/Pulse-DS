@@ -63,7 +63,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
             var cfg = JSON.parse(xhr.responseText);
             window.__navbarConfig = cfg;
             var prefix = html.getAttribute('data-title-prefix') || '';
-            var site = (cfg.text && String(cfg.text).trim()) || 'Pulse';
+            var site = (cfg.text && String(cfg.text).trim()) || 'Pulse-DS';
             document.title = prefix ? prefix + ' · ' + site : site;
             if (cfg.logo && /^(https?:\/\/|\/|data:image)/i.test(String(cfg.logo).trim())) {
               var fav = document.querySelector('link[rel="icon"]');

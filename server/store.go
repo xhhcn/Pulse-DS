@@ -1309,7 +1309,7 @@ func GenerateAuthToken() (string, error) {
 
 // NavbarConfig represents the navbar configuration
 type NavbarConfig struct {
-	Text         string `json:"text"`          // Custom text for navbar (default: "Pulse")
+	Text         string `json:"text"`          // Custom text for navbar (default: "Pulse-DS")
 	Logo         string `json:"logo"`          // Custom logo URL or SVG (default: built-in SVG)
 	SharedSecret string `json:"shared_secret"` // Shared secret for all clients
 	CustomCSS    string `json:"custom_css"`    // Custom CSS styles for all pages
@@ -1334,7 +1334,7 @@ func (s *Store) GetNavbarConfig() (*NavbarConfig, error) {
 		if data == nil {
 			// Return default config if not found
 			config = NavbarConfig{
-				Text:         "Pulse",
+				Text:         "Pulse-DS",
 				Logo:         "", // Empty means use default SVG
 				SharedSecret: "", // Will be generated if needed
 			}

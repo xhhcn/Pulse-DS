@@ -323,7 +323,7 @@ const D: Record<string, [string, string]> = {
   'settings.tab.privacy': ['Privacy', '隐私'],
   'settings.tab.tcping': ['TCPing', 'TCPing'],
   'settings.navbarText': ['Site name', '站点名称'],
-  'settings.navbarTextHint': ['Shown in the top bar and browser title. Empty = "Pulse".', '显示在顶栏与浏览器标题。留空则为 "Pulse"。'],
+  'settings.navbarTextHint': ['Shown in the top bar and browser title. Empty = "Pulse-DS".', '显示在顶栏与浏览器标题。留空则为 "Pulse-DS"。'],
   'settings.navbarLogo': ['Logo', '图标'],
   'settings.navbarLogoHint': ['Image URL or inline SVG. Empty = built-in logo.', '图片地址或内联 SVG，留空使用默认图标。'],
   'settings.sharedSecret': ['Shared secret', '共享密钥'],

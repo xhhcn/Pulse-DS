@@ -11,7 +11,7 @@ function applyBrand(): void {
   const cfg = navbarConfig();
   const text = document.getElementById('brand-text');
   const logo = document.getElementById('brand-logo');
-  if (text) text.textContent = (cfg && cfg.text && String(cfg.text).trim()) || 'Pulse';
+  if (text) text.textContent = (cfg && cfg.text && String(cfg.text).trim()) || 'Pulse-DS';
   if (!logo) return;
   const raw = cfg && cfg.logo ? String(cfg.logo).trim() : '';
   if (!raw) { logo.innerHTML = DEFAULT_LOGO; return; }

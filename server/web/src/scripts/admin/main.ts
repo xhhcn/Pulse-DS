@@ -610,7 +610,7 @@ async function loadSettings(): Promise<void> {
   pendingShareToken = privacyCfg.share_token || '';
   pendingShareSeconds = 0;
 
-  $('s-text').value = navbarCfg.text || 'Pulse';
+  $('s-text').value = navbarCfg.text || 'Pulse-DS';
   $('s-logo').value = navbarCfg.logo || '';
   $('s-secret').value = navbarCfg.shared_secret || '';
   $('s-secret').classList.remove('border-[var(--warn)]');
@@ -664,7 +664,7 @@ function collectNavbar(): any {
     }
   }
   return {
-    text: $('s-text').value.trim() || 'Pulse',
+    text: $('s-text').value.trim() || 'Pulse-DS',
     logo: $('s-logo').value.trim(),
     shared_secret: $('s-secret').value,
     custom_css: css.trim(),

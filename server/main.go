@@ -4203,7 +4203,7 @@ func handleSetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 
 	// Validate config
 	if config.Text == "" {
-		config.Text = "Pulse" // Default to "Pulse" if empty
+		config.Text = "Pulse-DS" // Default to the product name if empty
 	}
 
 	// Get current config to check if SharedSecret has changed
