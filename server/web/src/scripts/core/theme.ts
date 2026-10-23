@@ -31,15 +31,41 @@ function applyClasses(theme: Theme): void {
   }
 }
 
+function rgba(c: string): number[] | null {
+  const m = c.match(/rgba?\(([^)]+)\)/);
+  if (!m) return null;
+  const v = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+  return [v[0], v[1], v[2], v.length > 3 ? v[3] : 1];
+}
+
+/**
+ * Keep the browser chrome (the iPhone status bar, Safari's tinted tab bar)
+ * the colour of the top bar, or of the page where there is none (login).
+ * A translucent bar (glass mode) is flattened over the page background.
+ */
+export function syncThemeColor(): void {
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!meta || !document.body) return;
+  const page = rgba(getComputedStyle(document.body).backgroundColor) || [0, 0, 0, 1];
+  const bar = document.querySelector<HTMLElement>('.topbar');
+  const top = (bar && rgba(getComputedStyle(bar).backgroundColor)) || page;
+  const a = top[3];
+  meta.content = '#' + [0, 1, 2].map((i) => Math.round(top[i] * a + page[i] * (1 - a)).toString(16).padStart(2, '0')).join('');
+}
+
 export function setTheme(theme: Theme): void {
   try { localStorage.setItem(KEY, theme); } catch {}
   const html = document.documentElement;
   const doc: any = document;
   if (typeof doc.startViewTransition === 'function') {
-    doc.startViewTransition(() => applyClasses(theme));
+    doc.startViewTransition(() => {
+      applyClasses(theme);
+      syncThemeColor();
+    });
   } else {
     html.classList.add('theme-switching');
     applyClasses(theme);
+    syncThemeColor();
     void html.offsetHeight;
     requestAnimationFrame(() => requestAnimationFrame(() => html.classList.remove('theme-switching')));
   }
@@ -58,3 +84,8 @@ export function isDark(): boolean {
 export function onThemeChange(fn: (theme: Theme) => void): void {
   window.addEventListener('pulse:theme', (e: any) => fn(e.detail?.theme || getTheme()));
 }
+
+// The boot script guessed the top bar's colour before the page existed; now
+// that it does, measure it (the login page has no top bar at all).
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncThemeColor);
+else syncThemeColor();

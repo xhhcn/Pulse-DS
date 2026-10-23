@@ -43,11 +43,21 @@ export function speedMB(mb: unknown): string {
   return speedBytes((Number(mb) || 0) * 1e6);
 }
 
+/**
+ * Rates with three significant digits (7.20 KB/s, 72.0 KB/s, 720 KB/s): the
+ * width stays steady and nothing flickers in the hundredths on every
+ * 3-second update. A value that would round to 1000 moves up a unit.
+ */
 export function speedBytes(bps: number): string {
-  if (bps < 1024) return `${bps.toFixed(0)} B/s`;
-  if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(1)} KB/s`;
-  if (bps < 1024 * 1024 * 1024) return `${(bps / 1024 / 1024).toFixed(2)} MB/s`;
-  return `${(bps / 1024 / 1024 / 1024).toFixed(2)} GB/s`;
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s', 'TB/s'];
+  let v = Number.isFinite(bps) && bps > 0 ? bps : 0;
+  let i = 0;
+  while (v >= 999.5 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  const n = i === 0 || v >= 99.95 ? v.toFixed(0) : v >= 9.995 ? v.toFixed(1) : v.toFixed(2);
+  return `${n} ${units[i]}`;
 }
 
 export function linkSpeed(mbps: unknown): string {

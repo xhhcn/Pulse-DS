@@ -154,8 +154,8 @@ function renderRowHtml(s: any): string {
   </div>
   <div class="a-net flex flex-col gap-1 min-w-0">${ipRow('IPv4', s.ipv4 || '')}${ipRow('IPv6', s.ipv6 || '')}</div>
   <div class="a-traffic text-[12px] tnum flex flex-col gap-1">
-    <div class="flex items-center gap-1.5"><span class="text-[var(--ok)]">${icon('arrow-down', 11)}</span><span class="t-2">${esc(bytes(s.total_net_in_bytes || 0))}</span></div>
-    <div class="flex items-center gap-1.5"><span class="text-[var(--info)]">${icon('arrow-up', 11)}</span><span class="t-2">${esc(bytes(s.total_net_out_bytes || 0))}</span></div>
+    <div class="flex items-center gap-1.5"><span class="t-3">${icon('arrow-down', 11)}</span><span class="t-2">${esc(bytes(s.total_net_in_bytes || 0))}</span></div>
+    <div class="flex items-center gap-1.5"><span class="t-3">${icon('arrow-up', 11)}</span><span class="t-2">${esc(bytes(s.total_net_out_bytes || 0))}</span></div>
   </div>
   <div class="a-actions flex items-center gap-0.5">
     <button type="button" class="icon-btn info" data-act="edit" title="${attr(t('admin.edit'))}">${icon('pencil', 15)}</button>

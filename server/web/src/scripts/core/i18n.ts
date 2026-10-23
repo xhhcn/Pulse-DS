@@ -50,7 +50,9 @@ const D: Record<string, [string, string]> = {
   // ---- dashboard
   'dash.title': ['Servers', '服务器'],
   'dash.subtitle': ['Updated in real time · click a server for details', '实时更新 · 点击服务器查看详情'],
-  'dash.search': ['Search name, location, OS, CPU…', '搜索名称、位置、系统、CPU…'],
+  // No leading verb: the magnifier already says "search", and the short form fits a 360 px phone.
+  'dash.search': ['Name, location, OS, CPU…', '名称、位置、系统、CPU…'],
+  'dash.searchTitle': ['Search servers by name, location, OS or CPU', '按名称、位置、系统或 CPU 搜索服务器'],
   'dash.sort': ['Sort', '排序'],
   'dash.sortBy': ['Sort by', '排序方式'],
   'dash.sort.default': ['Default order', '默认顺序'],

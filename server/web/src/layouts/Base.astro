@@ -25,8 +25,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="color-scheme" content="dark light" />
-    <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0f1012" media="(prefers-color-scheme: dark)" />
+    <!-- Set below to the top bar's colour for the theme in use; theme.ts keeps it in step. -->
+    <meta name="theme-color" content="#18191b" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <title>{title}</title>
@@ -55,6 +55,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
 
         // Navbar config: loaded synchronously so operator custom CSS / JS is
         // in place before first paint and before DOMContentLoaded.
+        var glass = false;
         try {
           var xhr = new XMLHttpRequest();
           xhr.open('GET', '/api/navbar/config', false);
@@ -75,6 +76,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
               }
             }
             if (cfg.show_glass) html.classList.add('glass-enabled');
+            glass = !!cfg.show_glass;
             if (cfg.custom_css && String(cfg.custom_css).trim()) {
               var st = document.createElement('style');
               st.setAttribute('data-custom-css', '');
@@ -92,6 +94,11 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
             }
           }
         } catch (e) {}
+
+        // Browser chrome (the iPhone status bar, Safari's tinted tab bar)
+        // takes the top bar's colour for the theme chosen here, not the OS's.
+        var tc = document.querySelector('meta[name="theme-color"]');
+        if (tc) tc.setAttribute('content', theme === 'dark' ? (glass ? '#12121a' : '#18191b') : glass ? '#fcfcfe' : '#ffffff');
       })();
     </script>
   </head>

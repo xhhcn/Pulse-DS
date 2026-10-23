@@ -80,6 +80,14 @@ export function memorySummary(s: Server): string {
   return bits.join(' · ');
 }
 
+// Drive types as vendors write them ("NVMe", not "NVME"); anything else is
+// an acronym-like bus name and stays upper case.
+const DISK_TYPE: Record<string, string> = { nvme: 'NVMe', ssd: 'SSD', hdd: 'HDD', disk: 'Disk' };
+function diskType(v: unknown): string {
+  const raw = String(v || 'disk');
+  return DISK_TYPE[raw.toLowerCase()] || raw.toUpperCase();
+}
+
 /** Disk card: "1 × SSD · 1.9 TB · S.M.A.R.T. OK", '' when unknown. */
 export function diskSummary(s: Server): string {
   const disks: any[] = Array.isArray(s.hardware?.disks) ? s.hardware.disks : [];
@@ -88,7 +96,7 @@ export function diskSummary(s: Server): string {
   let total = 0;
   let failed = 0;
   disks.forEach((d) => {
-    const k = String(d.type || 'disk').toUpperCase();
+    const k = diskType(d.type);
     kinds.set(k, (kinds.get(k) || 0) + 1);
     total += Number(d.size_bytes) || 0;
     if (d.smart_status === 'failed') failed++;
@@ -435,7 +443,7 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
       const tempV = d.temp_c != null ? Number(d.temp_c) : null;
       const tempCls = tempV != null && tempV >= 85 ? 'text-[var(--crit)] font-semibold' : tempV != null && tempV >= 70 ? 'text-[var(--warn)]' : '';
       return [
-        `<span class="font-semibold">${esc(d.device)}</span>${d.type ? ` <span class="pill pill-sm pill-neutral uppercase">${esc(d.type)}</span>` : ''}`,
+        `<span class="font-semibold">${esc(d.device)}</span>${d.type ? ` <span class="pill pill-sm pill-neutral">${esc(diskType(d.type))}</span>` : ''}`,
         `<div class="wrap">${esc(d.model || '—')}</div>${d.serial ? `<div class="t-3 mono text-[12px]">SN ${esc(d.serial)}</div>` : ''}`,
         d.size_bytes ? esc(bytesDecimal(d.size_bytes)) : '—',
         smart,
@@ -451,7 +459,7 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
                   : '—',
             ]
           : []),
-        `${num(d.read_mb_s)} / ${num(d.write_mb_s)} MB/s<div class="t-3 text-[12px]">${num(d.read_iops, 0)} / ${num(d.write_iops, 0)} IOPS</div>`,
+        `${num(d.read_mb_s)} / ${num(d.write_mb_s)} MB/s<div class="t-3 text-[12px]">${int(d.read_iops)} / ${int(d.write_iops)} IOPS</div>`,
         miniBar(d.util_pct, 56),
       ];
     });
@@ -514,7 +522,7 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
             : n.oper_state === 'unknown' || !n.oper_state
               ? pill('unknown', t('detail.linkUnknown'))
               : pill('crit', t('detail.linkDown')),
-        idle ? '—' : `<span class="text-[var(--ok)]">↓</span> ${esc(speedMB(n.rx_mb_s))} <span class="t-3">·</span> <span class="text-[var(--info)]">↑</span> ${esc(speedMB(n.tx_mb_s))}`,
+        idle ? '—' : `<span class="t-3">↓</span> ${esc(speedMB(n.rx_mb_s))} <span class="t-3">·</span> <span class="t-3">↑</span> ${esc(speedMB(n.tx_mb_s))}`,
         idle ? '—' : `${esc(bytes(n.rx_bytes || 0, 1))} <span class="t-3">/</span> ${esc(bytes(n.tx_bytes || 0, 1))}`,
         // Lifetime totals are informational; what matters is growth, which the
         // server reports as err_recent (last ~20 min) and flags from 50 up.

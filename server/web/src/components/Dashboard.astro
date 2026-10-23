@@ -37,7 +37,7 @@ const sorts = ['default', 'name', 'health', 'uptime', 'cpu', 'memory', 'disk', '
       <div class="flex items-center gap-2">
         <div class="relative flex-1 sm:flex-none">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 t-3 pointer-events-none"><Icon name="search" size={14} /></span>
-          <input id="system-filter-input" type="search" autocomplete="off" class="input pl-8 sm:w-60" data-i18n-placeholder="dash.search" placeholder="Search…" />
+          <input id="system-filter-input" type="search" autocomplete="off" class="input pl-8 sm:w-64" data-i18n-placeholder="dash.search" data-i18n-title="dash.searchTitle" title="Search servers by name, location, OS or CPU" placeholder="Search…" />
         </div>
         <div class="relative" id="sort-wrap">
           <button id="sort-btn" type="button" class="btn" aria-haspopup="menu" aria-expanded="false">

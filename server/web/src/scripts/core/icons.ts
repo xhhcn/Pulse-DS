@@ -34,6 +34,7 @@ const P: Record<string, string> = {
   palette: '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
   refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>',
   lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
   'log-out': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
   pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
@@ -254,10 +255,59 @@ export function remoteIconHtml(name: string, cls: string, title = '', fallback =
   const fb = fallback ? ` data-fallback="${fallback.replace(/"/g, '')}"` : '';
   if (cached === null) {
     if (fallback === 'text') return `<span class="text-[12px] t-2"${t}>${title.replace(/</g, '&lt;')}</span>`;
-    return `<span class="${cls}"${t}>${fallback ? icon(fallback, 18, 't-3') : ''}</span>`;
+    // No fallback: render nothing. An empty box here (a flag next to its
+    // country code, say) left a gap whenever the icon CDN was unreachable.
+    return fallback ? `<span class="${cls}"${t}>${icon(fallback, 18, 't-3')}</span>` : '';
   }
   // Not loaded yet: keep the box collapsed so text around it does not gap.
   return `<span class="${cls}" data-remote-icon="${safeName}"${cached ? ` data-loaded="${safeName}"` : ' hidden'}${t}${fb}>${cached || ''}</span>`;
+}
+
+/* ------------------------------------------------------------------ */
+/* OS marks: single-colour Simple Icons glyphs, drawn in currentColor   */
+/* ------------------------------------------------------------------ */
+// Matched against "<os name> <agent icon name>", most specific first: the
+// agent reports a generic penguin for Mint, Kali, Alpine and the like, and
+// older agents may send no icon at all, so the name decides when it can.
+const OS_GLYPHS: Array<[RegExp, string]> = [
+  [/proxmox/, 'proxmox'],
+  [/raspbian|raspberry/, 'raspberrypi'],
+  [/deepin/, 'deepin'],
+  [/debian/, 'debian'],
+  [/ubuntu/, 'ubuntu'],
+  [/linux ?mint|linuxmint/, 'linuxmint'],
+  [/pop!?_?os/, 'popos'],
+  [/elementary/, 'elementary'],
+  [/zorin/, 'zorin'],
+  [/kali/, 'kalilinux'],
+  [/parrot/, 'parrotsecurity'],
+  [/manjaro/, 'manjaro'],
+  [/endeavour/, 'endeavouros'],
+  [/garuda/, 'garudalinux'],
+  [/arch/, 'archlinux'],
+  [/rocky/, 'rockylinux'],
+  [/alma/, 'almalinux'],
+  [/centos/, 'centos'],
+  [/red ?hat|rhel/, 'redhat'],
+  [/oracle/, 'oracle'],
+  [/fedora/, 'fedora'],
+  [/suse/, 'opensuse'],
+  [/alpine/, 'alpinelinux'],
+  [/gentoo/, 'gentoo'],
+  [/void/, 'voidlinux'],
+  [/slackware/, 'slackware'],
+  [/nixos/, 'nixos'],
+  [/solus/, 'solus'],
+  [/freebsd/, 'freebsd'],
+  [/mac ?os|darwin|apple/, 'apple'],
+  [/windows/, 'windows'],
+  [/linux/, 'linux'],
+];
+
+export function osGlyph(os: unknown, agentIcon: unknown): string | null {
+  const hay = `${String(os || '')} ${String(agentIcon || '')}`.toLowerCase();
+  for (const [re, glyph] of OS_GLYPHS) if (re.test(hay)) return `simple-icons:${glyph}`;
+  return null;
 }
 
 /* ------------------------------------------------------------------ */

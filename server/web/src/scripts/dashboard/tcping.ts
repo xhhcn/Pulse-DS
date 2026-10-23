@@ -336,7 +336,7 @@ export class TCPingPanel {
       };
       set('[data-tp-latest]', !st.hasLatest ? '—' : st.latest == null ? t('tcping.timeout') : fmtMs(st.latest));
       set('[data-tp-avg]', st.count ? fmtMs(st.avg) : '—');
-      set('[data-tp-loss]', st.count ? `${st.loss.toFixed(st.loss > 0 && st.loss < 1 ? 1 : 0)}%` : '—');
+      set('[data-tp-loss]', st.count ? fmtLoss(st.loss) : '—');
     });
     // Header totals: server-side stats for "all targets", client-side for a selection.
     const avgEl = this.q('avg');
@@ -349,7 +349,7 @@ export class TCPingPanel {
       loss = this.serverStats.loss;
     }
     if (avgEl) avgEl.textContent = all.count ? fmtMs(avg) : '—';
-    if (lossEl) lossEl.textContent = all.count ? `${loss.toFixed(2)}%` : '—';
+    if (lossEl) lossEl.textContent = all.count ? fmtLoss(loss) : '—';
   }
 
   private updateSpan(): void {
@@ -398,7 +398,7 @@ export class TCPingPanel {
     const yLabels: number[] = [];
     for (let v = 0; v <= yMax + 1e-9; v += step) yLabels.push(v);
     const labelChars = Math.max(...yLabels.map((v) => `${fmtTick(v)} ms`.length));
-    const left = 10 + Math.round(labelChars * 6.4);
+    const left = 10 + Math.round(labelChars * 7); // ~7 px per tabular digit at the 12 px tick size
     const right = width - 10;
     const top = 10;
     const bottom = height - 24;
@@ -624,6 +624,17 @@ function fmtTick(v: number): string {
 
 function fmtMs(v: number): string {
   return `${v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0)} ms`;
+}
+
+/**
+ * One rule for the header total and every target card: whole percent, with a
+ * decimal only below 1% where it carries meaning (0%, <0.1%, 0.4%, 5%, 12%).
+ * Whole numbers also keep the target cards' stats on one line.
+ */
+function fmtLoss(v: number): string {
+  if (!(v > 0)) return '0%';
+  if (v < 0.1) return '<0.1%';
+  return `${v < 1 ? v.toFixed(1) : Math.round(v)}%`;
 }
 
 function cssEscape(v: string): string {

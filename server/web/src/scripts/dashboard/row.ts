@@ -1,7 +1,7 @@
 /** One server row: initial render + in-place patching for live updates. */
 import { esc, attr } from '../core/dom';
 import { speedMiB, uptimeLong, uptimeShort } from '../core/format';
-import { flagIcon, icon, remoteIconHtml } from '../core/icons';
+import { flagIcon, icon, osGlyph, remoteIconHtml } from '../core/icons';
 import { getLang, t } from '../core/i18n';
 import type { HealthKey, Server } from './state';
 
@@ -23,12 +23,17 @@ export function healthPill(s: Server, _size: 'sm' | 'md' = 'sm'): string {
   return `<span class="health-text ${cls}" title="${attr(title)}">${esc(label)}</span>`;
 }
 
-function meter(field: string, label: string, v: number, online: boolean): string {
-  return `<span class="m-label">${esc(label)}</span><div class="meter"><span class="meter-val" data-f="${field}-val">${v.toFixed(1)}%</span><div class="meter-track"><div class="meter-fill ${fillClass(v, online)}" data-f="${field}-fill" style="width:${v.toFixed(1)}%"></div></div></div>`;
+// A host that has never reported has no readings, only zero-filled defaults:
+// show a dash and an empty track rather than "0.0%" that looks measured.
+function meter(field: string, label: string, v: number, s: Server): string {
+  const shown = s.reported ? `${v.toFixed(1)}%` : '—';
+  const width = s.reported ? v.toFixed(1) : '0';
+  return `<span class="m-label">${esc(label)}</span><div class="meter"><span class="meter-val" data-f="${field}-val">${shown}</span><div class="meter-track"><div class="meter-fill ${fillClass(v, s.online)}" data-f="${field}-fill" style="width:${width}%"></div></div></div>`;
 }
 
 function netHtml(s: Server): string {
-  return `<span class="t-3">↓</span><span data-f="net-in" class="ml-1">${esc(speedMiB(s.netIn))}</span><span class="t-3 ml-2.5">↑</span><span data-f="net-out" class="ml-1">${esc(speedMiB(s.netOut))}</span>`;
+  if (!s.reported) return '<span class="t-3">—</span>';
+  return `<span class="net-dir"><span class="t-3">↓</span><span data-f="net-in">${esc(speedMiB(s.netIn))}</span></span><span class="net-dir"><span class="t-3">↑</span><span data-f="net-out">${esc(speedMiB(s.netOut))}</span></span>`;
 }
 
 export function locationHtml(s: Server, withText = false): string {
@@ -41,8 +46,11 @@ export function locationHtml(s: Server, withText = false): string {
 
 export function osHtml(s: Server, withText = false): string {
   if (!s.osIcon && !s.os) return `<span class="t-3 text-[12px]">—</span>`;
-  const ic = s.osIcon ? remoteIconHtml(s.osIcon, 'os-icon', s.os, 'monitor') : '';
-  const text = withText || !s.osIcon ? `<span class="text-[12px] t-2 truncate">${esc(s.os || '—')}</span>` : '';
+  // Every host gets a mark in the narrow OS column: its distribution's glyph,
+  // or a neutral monitor when neither the name nor the agent's icon is known.
+  const glyph = osGlyph(s.os, s.osIcon);
+  const ic = glyph ? remoteIconHtml(glyph, 'os-icon', s.os, 'monitor') : `<span class="os-icon">${icon('monitor', 16, 't-3')}</span>`;
+  const text = withText ? `<span class="text-[12px] t-2 truncate">${esc(s.os || '—')}</span>` : '';
   return `<span class="inline-flex items-center gap-1.5 min-w-0" title="${attr(s.os)}">${ic}${text}</span>`;
 }
 
@@ -50,8 +58,7 @@ function metaHtml(s: Server): string {
   // Narrow-screen meta line: only the facts the host has reported, so a
   // system that never connected does not show a row of dashes.
   const zh = getLang() === 'zh';
-  const hasUptime = !!s.uptime && !/^0+\s*[a-z]*$/i.test(s.uptime); // '0h' is what a host that never reported carries
-  const parts = [s.os || s.osIcon ? osHtml(s, true) : '', s.location ? locationHtml(s, true) : '', s.online || hasUptime ? `<span>${esc(uptimeLong(s.uptime, zh))}</span>` : ''];
+  const parts = [s.os || s.osIcon ? osHtml(s, true) : '', s.location ? locationHtml(s, true) : '', s.reported ? `<span>${esc(uptimeLong(s.uptime, zh))}</span>` : ''];
   return parts.filter(Boolean).join('');
 }
 
@@ -68,18 +75,22 @@ export function renderRow(s: Server, _opts: { showTags: boolean }): string {
     </button>
   </div>
   <div class="c-health" data-f="health">${healthPill(s)}</div>
-  <div class="c-uptime cell-num" data-f="uptime" title="${attr(uptimeLong(s.uptime, zh))}">${esc(uptimeShort(s.uptime, zh))}</div>
+  <div class="c-uptime cell-num" data-f="uptime"${s.reported ? ` title="${attr(uptimeLong(s.uptime, zh))}"` : ''}>${s.reported ? esc(uptimeShort(s.uptime, zh)) : '<span class="t-3">—</span>'}</div>
   <div class="c-loc" data-f="loc">${locationHtml(s)}</div>
-  <div class="c-cpu">${meter('cpu', t('dash.col.cpu'), s.cpu, s.online)}</div>
-  <div class="c-mem">${meter('mem', t('dash.col.memory'), s.memory, s.online)}</div>
-  <div class="c-disk">${meter('disk', t('dash.col.disk'), s.disk, s.online)}</div>
-  <div class="c-net"><span class="m-label">${esc(t('dash.col.net'))}</span><div class="cell-num inline-flex items-center whitespace-nowrap" data-f="net">${netHtml(s)}</div></div>
+  <div class="c-cpu">${meter('cpu', t('dash.col.cpu'), s.cpu, s)}</div>
+  <div class="c-mem">${meter('mem', t('dash.col.memory'), s.memory, s)}</div>
+  <div class="c-disk">${meter('disk', t('dash.col.disk'), s.disk, s)}</div>
+  <div class="c-net"><span class="m-label">${esc(t('dash.col.net'))}</span><div class="net cell-num" data-f="net">${netHtml(s)}</div></div>
   <div class="c-os flex justify-center" data-f="os">${osHtml(s)}</div>
   <div class="c-meta" data-f="meta">${metaHtml(s)}</div>
 </div>`;
 }
 
-/** Patch a rendered row in place. `prev` is the previously rendered model (or null). */
+/**
+ * Patch a rendered row in place. `prev` is the previously rendered model (or
+ * null). A change of `reported` is not patched here: the caller re-renders
+ * the row, since a never-reported row has no readings to update.
+ */
 export function patchRow(el: HTMLElement, s: Server, prev: Server | null, _opts: { showTags: boolean }): void {
   const q = (f: string) => el.querySelector<HTMLElement>(`[data-f="${f}"]`);
   const changed = (k: keyof Server) => !prev || prev[k] !== s[k];
@@ -111,7 +122,7 @@ export function patchRow(el: HTMLElement, s: Server, prev: Server | null, _opts:
     const meta = q('meta');
     if (meta) meta.innerHTML = metaHtml(s);
   }
-  if (changed('uptime')) {
+  if (changed('uptime') && s.reported) {
     const u = q('uptime');
     if (u) {
       u.textContent = uptimeShort(s.uptime, getLang() === 'zh');
@@ -133,10 +144,12 @@ export function patchRow(el: HTMLElement, s: Server, prev: Server | null, _opts:
       if (fill.className !== cls) fill.className = cls;
     }
   };
-  if (changed('cpu') || changed('online')) bar('cpu', s.cpu);
-  if (changed('memory') || changed('online')) bar('mem', s.memory);
-  if (changed('disk') || changed('online')) bar('disk', s.disk);
-  if (changed('netIn') || changed('netOut')) {
+  if (s.reported) {
+    if (changed('cpu') || changed('online')) bar('cpu', s.cpu);
+    if (changed('memory') || changed('online')) bar('mem', s.memory);
+    if (changed('disk') || changed('online')) bar('disk', s.disk);
+  }
+  if (s.reported && (changed('netIn') || changed('netOut'))) {
     const i = q('net-in');
     const o = q('net-out');
     if (i) i.textContent = speedMiB(s.netIn);

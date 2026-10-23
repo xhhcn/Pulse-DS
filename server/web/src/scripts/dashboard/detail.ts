@@ -278,7 +278,9 @@ export class DetailDialog {
     this.q('dot').className = `dot ${s.online ? 'dot-online' : 'dot-offline'}`;
     this.q('name').textContent = s.name;
     this.q('name').title = s.name;
-    this.q('health').innerHTML = healthPill(s, 'md');
+    // No hardware health (a VPS, or a host that never reported): leave the
+    // title alone instead of trailing it with a lone dash.
+    this.q('health').innerHTML = s.health ? healthPill(s, 'md') : '';
     this.q('type').hidden = true;
     const status = s.online ? `<span class="text-[var(--ok)]">${esc(t('common.online'))}</span>` : `<span class="text-[var(--crit)]">${esc(t('common.offline'))}</span>`;
     const typeText = s.type === 'DS' ? t('detail.type.DS') : s.type === 'VPS' ? t('detail.type.VPS') : s.type;

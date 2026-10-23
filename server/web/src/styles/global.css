@@ -15,17 +15,25 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
   --radius: 8px;
   --radius-lg: 10px;
-  --ok: #16a34a;
-  --warn: #d97706;
-  --crit: #dc2626;
-  --info: #2563eb;
+  /* Status colours are text colours: one step deeper than the usual 600
+     shades so they keep 4.5:1 on white, on --surface-2 and on their own
+     pill tint. Bars keep the brighter shades through the -fill tokens. */
+  --ok: #15793a;
+  --warn: #ad4f08;
+  --crit: #b91c1c;
+  --info: #1d4ed8;
   --bar: #22a06b;
+  --warn-fill: #d97706;
+  --crit-fill: #dc2626;
   /* Fill for white-on-red controls. The dark theme lightens --crit so red
      text reads on a dark surface, which leaves white text on it at 2.8:1. */
   --crit-solid: #dc2626;
 }
 
+/* Three text levels, the same lightness steps in both themes. --text-3 still
+   reaches 4.5:1 on --surface-2, the darkest surface text sits on. */
 html.dark {
+  color-scheme: dark;
   --border-soft: rgba(255, 255, 255, 0.045);
   --bg: #121214;
   --surface: #18191b;
@@ -34,8 +42,8 @@ html.dark {
   --border: rgba(255, 255, 255, 0.07);
   --border-strong: rgba(255, 255, 255, 0.14);
   --text: #e8e8ea;
-  --text-2: #9d9da5;
-  --text-3: #6e6e77;
+  --text-2: #a5a5ad;
+  --text-3: #878790;
   --track: rgba(255, 255, 255, 0.09);
   --backdrop: rgba(0, 0, 0, 0.55);
   --focus: rgba(255, 255, 255, 0.5);
@@ -44,9 +52,13 @@ html.dark {
   --crit: #f87171;
   --info: #60a5fa;
   --bar: #34c27a;
+  --warn-fill: #fbbf24;
+  --crit-fill: #f87171;
+  --selection: rgba(96, 165, 250, 0.3);
 }
 
 html.light {
+  color-scheme: light;
   --border-soft: rgba(0, 0, 0, 0.05);
   --bg: #f6f6f7;
   --surface: #ffffff;
@@ -55,11 +67,17 @@ html.light {
   --border: rgba(0, 0, 0, 0.08);
   --border-strong: rgba(0, 0, 0, 0.16);
   --text: #1d1d20;
-  --text-2: #5f5f68;
-  --text-3: #7a7a84;
+  --text-2: #52525b;
+  --text-3: #6e6e78;
   --track: rgba(0, 0, 0, 0.07);
   --backdrop: rgba(30, 30, 34, 0.4);
   --focus: rgba(0, 0, 0, 0.45);
+  --selection: rgba(37, 99, 235, 0.18);
+}
+
+/* A calm tint instead of the browser's saturated default. */
+::selection {
+  background: var(--selection);
 }
 
 [hidden] {
@@ -354,7 +372,7 @@ html.kb :focus-visible {
   transition: transform 0.15s ease;
 }
 .switch input:checked + span {
-  background: var(--ok);
+  background: var(--bar);
 }
 .switch input:checked + span::after {
   transform: translateX(16px);
@@ -479,9 +497,9 @@ html.kb :focus-visible {
   transition: width 0.5s ease, background-color 0.3s ease;
 }
 .fill-ok { background: var(--bar); }
-.fill-mid { background: var(--warn); }
+.fill-mid { background: var(--warn-fill); }
 .fill-high { background: #f97316; }
-.fill-crit { background: var(--crit); }
+.fill-crit { background: var(--crit-fill); }
 .fill-off { background: var(--text-3); opacity: 0.4; }
 .bigmeter-track {
   height: 4px;
@@ -517,7 +535,12 @@ html.kb :focus-visible {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 8px;
 }
+/* A button centres its content vertically; when one card wraps (a timeout
+   reads "timeout / failed") its neighbours stretch, so pin content to the top. */
 .tp-target {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
   text-align: left;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -585,7 +608,7 @@ html.kb :focus-visible {
 }
 .tp-svg text {
   fill: var(--text-3);
-  font-size: 11px;
+  font-size: 12px;
   font-family: inherit;
   font-variant-numeric: tabular-nums;
 }
@@ -891,6 +914,28 @@ html.kb :focus-visible {
   font-size: 12px;
   white-space: nowrap;
 }
+/* Network rates: one line on wide screens, stacked on tablets (below). */
+.net {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.net-dir {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  /* Two short lines instead of one long one: at tablet widths a pair of
+     busy rates on one line ran past the card edge. */
+  .net {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    line-height: 1.4;
+  }
+}
 .health-ok { color: var(--text-2); }
 .health-warn { color: var(--warn); }
 .health-crit { color: var(--crit); }
@@ -916,9 +961,10 @@ html.kb .copy-btn:focus-visible {
   height: 100%;
   display: block;
 }
-/* OS marks vary from square glyphs to wide wordmarks: fix the height, let
-   the width follow the viewBox. */
-.os-icon { height: 20px; min-width: 20px; max-width: 20px; }
+/* OS marks are single-colour Simple Icons glyphs drawn in currentColor, so
+   they follow the theme like text instead of carrying brand colours that
+   vanish on one of the two backgrounds (a black Apple, the dark Debian red). */
+.os-icon { height: 16px; min-width: 16px; max-width: 16px; color: var(--text-2); }
 .os-icon svg { max-height: 100%; max-width: 100%; width: auto; height: auto; display: block; }
 .flag-icon { width: 22px; height: 22px; border-radius: 3px; overflow: hidden; }
 .c-chev {
@@ -938,7 +984,7 @@ html.kb .copy-btn:focus-visible {
 }
 @media (max-width: 1023px) {
   .srv-table {
-    --cols: minmax(160px, 2fr) 84px minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(130px, 1.2fr);
+    --cols: minmax(160px, 2fr) 84px minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(88px, 1fr);
   }
   .srv-head,
   .srv-row {
@@ -1050,8 +1096,10 @@ html.kb .copy-btn:focus-visible {
     flex: 1 1 100%;
     max-width: none;
   }
+  /* No hover on phones: the dialog has its own copy button, so the cards
+     stay free of a repeated icon. */
   .copy-btn {
-    opacity: 1;
+    display: none;
   }
 }
 
@@ -1418,7 +1466,7 @@ body.modal-open {
   background: var(--surface);
 }
 .brand-name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text);
 }
@@ -1592,7 +1640,9 @@ html.glass-enabled.dark {
 }
 html.glass-enabled.light {
   --surface: rgba(255, 255, 255, 0.75);
-  --surface-2: rgba(255, 255, 255, 0.6);
+  /* A dark tint, not a whiter white: hover, selection and chips must still
+     read against the frosted surface. */
+  --surface-2: rgba(0, 0, 0, 0.045);
   --border: rgba(0, 0, 0, 0.07);
 }
 html.glass-enabled .card,

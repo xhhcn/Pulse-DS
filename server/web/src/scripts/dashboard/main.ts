@@ -180,10 +180,12 @@ function paint(): void {
   state.view.forEach((s, i) => {
     keep.add(s.id);
     const entry = rows.get(s.id);
-    if (entry) {
+    if (entry && entry.s.reported === s.reported) {
       patchRow(entry.el, s, entry.s, opts);
       entry.s = s;
     } else {
+      // New row, or a host whose agent has just reported for the first time:
+      // its placeholders become readings, so build the row afresh.
       const tpl = document.createElement('template');
       tpl.innerHTML = renderRow(s, opts);
       const el = tpl.content.firstElementChild as HTMLElement;
@@ -191,6 +193,7 @@ function paint(): void {
         el.classList.add('rise-in');
         el.style.animationDelay = `${Math.min(i, 12) * 35}ms`;
       }
+      if (entry) entry.el.replaceWith(el);
       rows.set(s.id, { el, s });
     }
   });

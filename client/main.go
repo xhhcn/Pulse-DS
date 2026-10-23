@@ -130,6 +130,10 @@ var (
 
 const maxPendingTCPingResults = 500
 
+// agentVersion is the release this agent was built for. The dashboard shows
+// it on the hardware tab, so it is bumped together with every release tag.
+const agentVersion = "1.0.5"
+
 var (
 
 	// Cache for disk stats (changes slowly; refreshed every 30 s to avoid spawning
@@ -1237,7 +1241,7 @@ func collectSystemMetrics() metricPayload {
 		NetOutMBps:         netOut,
 		TotalNetInBytes:    totalNetInBytes,
 		TotalNetOutBytes:   totalNetOutBytes,
-		AgentVersion:       "1.0.0",
+		AgentVersion:       agentVersion,
 		Alert:              false, // Can be enhanced with actual alert logic
 		Hardware:           currentHardware(),
 	}

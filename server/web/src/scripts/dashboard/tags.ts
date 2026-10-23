@@ -4,15 +4,18 @@ import { bytes, speedMiB } from '../core/format';
 import { icon } from '../core/icons';
 import type { Server } from './state';
 
+// White text sits on these, so every stop keeps at least 4.5:1. "y" is gold:
+// amber into dark yellow, not the olive-to-teal it used to drift into.
 const GRADIENTS: Record<string, string> = {
-  r: 'linear-gradient(90deg,#dc2626 0%,#ea580c 50%,#db2777 100%)',
-  y: 'linear-gradient(90deg,#a3770a 0%,#16a34a 50%,#0d9488 100%)',
+  r: 'linear-gradient(90deg,#dc2626 0%,#c2410c 50%,#be185d 100%)',
+  y: 'linear-gradient(90deg,#b45309 0%,#a16207 50%,#854d0e 100%)',
   b: 'linear-gradient(90deg,#2563eb 0%,#9333ea 50%,#c026d3 100%)',
 };
 
+// Totals use the tray pair, rates the plain arrows.
 const LIVE_ICON: Record<string, string> = {
   'traffic:in': 'download',
-  'traffic:out': 'arrow-up',
+  'traffic:out': 'upload',
   'speed:in': 'arrow-down',
   'speed:out': 'arrow-up',
 };
