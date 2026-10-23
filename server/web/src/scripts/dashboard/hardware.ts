@@ -16,9 +16,24 @@ function section(key: string, iconName: string, count: number, body: string): st
 
 function table(head: string[], rows: string[][], widths: string[] = []): string {
   const cols = widths.length ? `<colgroup>${widths.map((w) => `<col style="width:${w}">`).join('')}</colgroup>` : '';
-  return `<div class="dtable-wrap"><table class="dtable">${cols}<thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows
+  return `<div class="dtable-wrap"><div class="dtable-scroll"><table class="dtable">${cols}<thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows
     .map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`)
-    .join('')}</tbody></table></div>`;
+    .join('')}</tbody></table></div></div>`;
+}
+
+/**
+ * Tables wider than the dialog scroll sideways with the scrollbar hidden, so
+ * the edge that has more columns behind it fades out (CSS: .more-left /
+ * .more-right) — otherwise a cut-off column reads as a broken table.
+ */
+export function updateScrollHint(el: HTMLElement): void {
+  const max = el.scrollWidth - el.clientWidth;
+  el.classList.toggle('more-left', max > 1 && el.scrollLeft > 1);
+  el.classList.toggle('more-right', max > 1 && el.scrollLeft < max - 1);
+}
+
+export function syncScrollHints(root: ParentNode): void {
+  root.querySelectorAll<HTMLElement>('.dtable-scroll').forEach(updateScrollHint);
 }
 
 function miniBar(v: number, width = 72): string {
@@ -372,7 +387,7 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
     const rows: Array<[string, string]> = [];
     const installed = dimms.length ? dimms.reduce((acc: number, d: any) => acc + (Number(d.size_bytes) || 0), 0) : Number(m?.total_bytes) || 0;
     const countNote = dimms.length === 1 ? t('hw.module') : dimms.length ? t('hw.modules', { n: dimms.length }) : '';
-    if (installed) rows.push([t('hw.total'), esc(bytes(installed, 0)) + (countNote ? ` <span class="t-3">· ${esc(countNote)}</span>` : '')]);
+    if (installed) rows.push([t('hw.total'), esc(bytes(installed, true)) + (countNote ? ` <span class="t-3">· ${esc(countNote)}</span>` : '')]);
     if (m) rows.push([t('hw.col.ecc'), esc(m.ecc_supported ? t('hw.eccSupported') : t('hw.eccNot'))]);
     if (m?.ecc_supported) {
       const cls = Number(m.ecc_uncorrectable) > 0 ? 'text-[var(--crit)] font-semibold' : Number(m.ecc_correctable) > 0 ? 'text-[var(--warn)]' : '';
@@ -387,7 +402,7 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
       const trs = dimms.map((d: any) => [
         // Apple silicon reports one slot-less "Unified" entry; show it in the same table.
         `<span class="font-semibold mono">${esc(/^unified$/i.test(String(d.locator || '')) ? t('hw.unifiedMemory') : d.locator || '—')}</span>`,
-        esc(bytes(d.size_bytes || 0, 0)),
+        esc(bytes(d.size_bytes || 0, true)),
         esc(d.type || '—'),
         ...(withSpeed
           ? [
@@ -476,7 +491,7 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
     const rows = hw.filesystems.map((f: any) => [
       `<span class="font-semibold mono">${esc(f.mount)}</span>${f.device ? `<div class="t-3 text-[12px] mono">${esc(f.device)}</div>` : ''}`,
       esc(f.fstype || '—'),
-      `${esc(bytes(f.used_bytes || 0, 1))} <span class="t-3">/ ${esc(bytes(f.total_bytes || 0, 1))}</span>`,
+      `${esc(bytes(f.used_bytes || 0))} <span class="t-3">/ ${esc(bytes(f.total_bytes || 0))}</span>`,
       miniBar(f.used_pct),
     ]);
     out.push(section('hw.filesystems', 'database', hw.filesystems.length, table([t('hw.col.mount'), t('hw.col.fstype'), t('hw.col.used'), t('hw.col.usage')], rows, ['34%', '12%', '26%', '28%'])));
@@ -523,7 +538,7 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
               ? pill('unknown', t('detail.linkUnknown'))
               : pill('crit', t('detail.linkDown')),
         idle ? '—' : `<span class="t-3">↓</span> ${esc(speedMB(n.rx_mb_s))} <span class="t-3">·</span> <span class="t-3">↑</span> ${esc(speedMB(n.tx_mb_s))}`,
-        idle ? '—' : `${esc(bytes(n.rx_bytes || 0, 1))} <span class="t-3">/</span> ${esc(bytes(n.tx_bytes || 0, 1))}`,
+        idle ? '—' : `${esc(bytes(n.rx_bytes || 0))} <span class="t-3">/</span> ${esc(bytes(n.tx_bytes || 0))}`,
         // Lifetime totals are informational; what matters is growth, which the
         // server reports as err_recent (last ~20 min) and flags from 50 up.
         idle

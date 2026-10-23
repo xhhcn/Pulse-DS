@@ -169,7 +169,9 @@ function renderRowHtml(s: any): string {
 function paint(): void {
   rendered = true;
   const sub = document.getElementById('admin-subtitle');
-  if (sub) sub.textContent = t(window.matchMedia('(pointer: coarse)').matches ? 'admin.subtitleTouch' : 'admin.subtitle', { n: systems.length });
+  // The drag hint only makes sense with something to reorder and a pointer to drag with.
+  const canDrag = systems.length > 1 && !window.matchMedia('(pointer: coarse)').matches;
+  if (sub) sub.textContent = t(canDrag ? 'admin.subtitle' : 'admin.subtitleTouch', { n: systems.length });
   if (!systems.length) {
     rows.clear();
     list.innerHTML = `<div class="py-16 text-center"><div class="inline-flex w-11 h-11 items-center justify-center rounded-xl subcard mb-3 t-3">${icon('server', 20)}</div><div class="text-[14px] font-semibold">${esc(t('admin.empty.title'))}</div><div class="text-[12px] t-3 mt-1">${esc(t('admin.empty.desc'))}</div></div>`;

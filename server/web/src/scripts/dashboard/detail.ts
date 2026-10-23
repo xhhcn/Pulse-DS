@@ -3,13 +3,13 @@
  * live patching while open, keyboard navigation and hash deep-links.
  */
 import { esc, attr, copyText, flashCopied } from '../core/dom';
-import { bytes, relativeAgo, speedMiB, uptimeLong } from '../core/format';
+import { bytes, capacityPair, relativeAgo, speedMiB, uptimeLong } from '../core/format';
 import { icon, hydrateRemoteIcons } from '../core/icons';
 import { applyI18n, getLang, t } from '../core/i18n';
 import { Modal } from '../core/modal';
 import { fillClass, healthPill, locationHtml, osHtml } from './row';
 import { renderTags, patchLiveTags } from './tags';
-import { cpuSummary, diskSummary, memorySummary, nicSummary, renderHardware, renderIssues, systemRows } from './hardware';
+import { cpuSummary, diskSummary, memorySummary, nicSummary, renderHardware, renderIssues, syncScrollHints, systemRows, updateScrollHint } from './hardware';
 import { TCPingPanel, latestLatencyText, tcpingConfigured } from './tcping';
 import type { Server } from './state';
 
@@ -84,6 +84,7 @@ export class DetailDialog {
         if (this.sensorOpen.has(key)) this.sensorOpen.delete(key);
         else this.sensorOpen.add(key);
         this.q('panel-hardware').innerHTML = renderHardware(this.current, this.sensorOpen);
+        syncScrollHints(this.q('panel-hardware'));
         return;
       }
       const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-issues-toggle]');
@@ -91,6 +92,18 @@ export class DetailDialog {
       this.issuesOpen = !this.issuesOpen;
       const box = this.q('panel-overview').querySelector<HTMLElement>('[data-o="issues"]');
       if (box) box.innerHTML = renderIssues(this.current, this.issuesOpen);
+    });
+    // Wide hardware tables: keep the edge fade in step with the scroll position.
+    this.root.addEventListener(
+      'scroll',
+      (e) => {
+        const el = e.target as HTMLElement;
+        if (el.classList && el.classList.contains('dtable-scroll')) updateScrollHint(el);
+      },
+      true,
+    );
+    window.addEventListener('resize', () => {
+      if (this.modal.isOpen && this.tab === 'hardware') syncScrollHints(this.q('panel-hardware'));
     });
     window.addEventListener('pulse:lang', () => {
       applyI18n(this.root);
@@ -260,6 +273,8 @@ export class DetailDialog {
     (['overview', 'hardware', 'tcping'] as Tab[]).forEach((k) => {
       this.q('panel-' + k).hidden = k !== tab;
     });
+    // A hidden panel has no width to measure: settle the table edge fades now.
+    if (tab === 'hardware') syncScrollHints(this.q('panel-hardware'));
     if (tab === 'tcping' && this.current) {
       if (!this.tcpingMounted) {
         this.tcpingMounted = true;
@@ -292,7 +307,8 @@ export class DetailDialog {
       typeText ? `<span>${esc(typeText)}</span>` : '',
       s.os || s.osIcon ? osHtml(s, true) : '',
       s.location ? locationHtml(s, true) : '',
-      s.reported ? `<span title="${attr(t('detail.uptime'))}">${esc(uptimeLong(s.uptime, zh))}</span>` : '',
+      // An offline host's last uptime describes nothing running; "updated … ago" below says when it was last seen.
+      s.reported && s.online ? `<span title="${attr(t('detail.uptime'))}">${esc(uptimeLong(s.uptime, zh))}</span>` : '',
       s.reported
         ? `<span title="${attr(s.updatedAt)}">${esc(t('detail.updated'))} ${esc(relativeAgo(s.updatedAt, zh))}</span>`
         : `<span class="t-3">${esc(t('admin.noAgent'))}</span>`,
@@ -315,8 +331,8 @@ export class DetailDialog {
   }
 
   private memSub(s: Server): string {
-    let l1 = s.memoryInfo || '—';
-    if (s.swapInfo && !/^0 B \/ 0 B$/.test(s.swapInfo)) l1 += ` · ${t('detail.swap')} ${s.swapInfo}`;
+    let l1 = s.memoryInfo ? capacityPair(s.memoryInfo) : '—';
+    if (s.swapInfo && !/^0 B \/ 0 B$/.test(s.swapInfo)) l1 += ` · ${t('detail.swap')} ${capacityPair(s.swapInfo)}`;
     return this.lines(l1, memorySummary(s));
   }
 
@@ -326,7 +342,7 @@ export class DetailDialog {
   }
 
   private diskSub(s: Server): string {
-    return this.lines(s.diskInfo || '—', diskSummary(s));
+    return this.lines(s.diskInfo ? capacityPair(s.diskInfo) : '—', diskSummary(s));
   }
 
   private netRows(s: Server): Array<[string, string]> {
@@ -406,6 +422,7 @@ export class DetailDialog {
 
   private renderHardware(s: Server): void {
     this.q('panel-hardware').innerHTML = renderHardware(s, this.sensorOpen);
+    if (this.tab === 'hardware') syncScrollHints(this.q('panel-hardware'));
     this.hwSig = s.hwSig;
     const issues = this.q('panel-overview').querySelector<HTMLElement>('[data-o="issues"]');
     if (issues) {

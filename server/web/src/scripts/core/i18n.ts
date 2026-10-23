@@ -47,6 +47,9 @@ const D: Record<string, [string, string]> = {
   'live.reconnecting': ['Reconnecting', '重连中'],
   'live.offline': ['Disconnected', '已断开'],
 
+  // ---- page titles (match the boot script in Base.astro)
+  'page.admin': ['Admin', '管理'],
+  'page.login': ['Login', '登录'],
   // ---- dashboard
   'dash.title': ['Servers', '服务器'],
   'dash.subtitle': ['Updated in real time · click a server for details', '实时更新 · 点击服务器查看详情'],
@@ -74,6 +77,10 @@ const D: Record<string, [string, string]> = {
   'dash.stat.noHardware': ['No hardware data yet', '暂无硬件数据'],
   'dash.stat.dsCount': ['{n} dedicated', '{n} 台独服'],
   'dash.stat.vpsCount': ['{n} VPS', '{n} 台 VPS'],
+  'dash.stat.pendingCount': ['{n} awaiting agent', '{n} 台等待探针'],
+  'dash.stat.otherCount': ['{n} other', '{n} 台其他'],
+  'dash.offlineFor': ['offline {t}', '离线 {t}'],
+  'dash.lastReport': ['Last report {t}', '最后上报 {t}'],
   'dash.col.server': ['Server', '服务器'],
   'dash.col.health': ['Health', '健康'],
   'dash.col.uptime': ['Uptime', '运行'],
@@ -85,6 +92,7 @@ const D: Record<string, [string, string]> = {
   'dash.col.os': ['OS', '系统'],
   'dash.empty.title': ['No servers yet', '还没有服务器'],
   'dash.empty.desc': ['Servers appear here once an agent starts reporting.', '探针开始上报后，服务器会显示在这里。'],
+  'dash.empty.add': ['Add a server', '添加服务器'],
   'dash.empty.filtered': ['No servers match the current filter.', '没有符合当前筛选条件的服务器。'],
   'dash.empty.clear': ['Clear filters', '清除筛选'],
   'dash.error.title': ['Could not reach the backend', '无法连接到后端'],

@@ -11,14 +11,38 @@ export function pct(v: unknown, digits = 1): string {
 }
 
 /** Binary-prefixed bytes (KiB…), two decimals for width stability. */
-export function bytes(v: unknown, digits = 2): string {
+/**
+ * Binary sizes with three significant digits, the same rule as the rates
+ * (8.00 GiB, 62.4 GiB, 476 GiB, 2.00 TiB). `whole` keeps nominal sizes
+ * whole (a 64 GiB DIMM, 2 TiB installed).
+ */
+export function bytes(v: unknown, whole = false): string {
   const n = Number(v) || 0;
   if (n < 1024) return `${Math.round(n)} B`;
   const units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
   let i = -1;
   let x = n;
   while (x >= 1024 && i < units.length - 1) { x /= 1024; i++; }
-  return `${x.toFixed(digits)} ${units[i]}`;
+  if (whole) return `${Math.round(x)} ${units[i]}`;
+  return `${x.toFixed(x >= 99.95 ? 0 : x >= 9.995 ? 1 : 2)} ${units[i]}`;
+}
+
+const BINARY_POW: Record<string, number> = { '': 0, K: 1, M: 2, G: 3, T: 4, P: 5 };
+
+/**
+ * The agent's "used / total" text ("780.20 GiB / 2048.00 GiB") re-formatted
+ * with bytes(), so the overview cards match the hardware tab
+ * ("780 GiB / 2.00 TiB"). Anything else is returned unchanged.
+ */
+export function capacityPair(text: unknown): string {
+  const raw = String(text || '');
+  const m = raw.match(/^\s*([\d.]+)\s*([KMGTP]?)i?B\s*\/\s*([\d.]+)\s*([KMGTP]?)i?B\s*$/i);
+  if (!m) return raw;
+  const size = (num: string, unit: string) => Number(num) * 1024 ** BINARY_POW[unit.toUpperCase()];
+  const used = size(m[1], m[2]);
+  const total = size(m[3], m[4]);
+  if (!Number.isFinite(used) || !Number.isFinite(total)) return raw;
+  return `${bytes(used)} / ${bytes(total)}`;
 }
 
 /** Decimal-prefixed bytes (GB / TB) used for disk capacities. */
@@ -136,6 +160,23 @@ export function timeHMS(d: Date): string {
 }
 export function dateTime(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${timeHMS(d)}`;
+}
+
+/**
+ * Time since `iso` as a bare duration for table cells ("3 小时" / "3h"); ''
+ * when the time is unknown. relativeAgo() is the sentence form ("3 小时前").
+ */
+export function sinceShort(iso: unknown, zh: boolean): string {
+  const t = Date.parse(String(iso || ''));
+  if (!Number.isFinite(t) || t <= 0) return '';
+  const s = Math.max(1, Math.round((Date.now() - t) / 1000));
+  if (s < 60) return zh ? `${s} 秒` : `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return zh ? `${m} 分钟` : `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return zh ? `${h} 小时` : `${h}h`;
+  const d = Math.floor(h / 24);
+  return zh ? `${d} 天` : `${d}d`;
 }
 
 export function relativeAgo(iso: unknown, zh: boolean): string {

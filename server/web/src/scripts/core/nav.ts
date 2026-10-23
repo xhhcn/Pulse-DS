@@ -35,6 +35,16 @@ function applyBrand(): void {
   logo.innerHTML = DEFAULT_LOGO;
 }
 
+// Tab title: "<page> · <site>" in the current language. Base.astro sets the
+// same string before first paint; this keeps it right after a language switch.
+const PAGE_TITLE: Record<string, string> = { admin: 'page.admin', login: 'page.login' };
+function applyTitle(): void {
+  const cfg = navbarConfig();
+  const site = (cfg && cfg.text && String(cfg.text).trim()) || 'Pulse-DS';
+  const key = PAGE_TITLE[document.documentElement.getAttribute('data-page') || ''];
+  document.title = key ? `${t(key)} · ${site}` : site;
+}
+
 function refreshButtons(): void {
   const themeBtn = document.getElementById('theme-btn');
   if (themeBtn) {
@@ -48,10 +58,12 @@ function refreshButtons(): void {
 export function initNav(): void {
   installFocusMode();
   applyBrand();
+  applyTitle();
   refreshButtons();
   document.getElementById('lang-btn')?.addEventListener('click', () => toggleLang());
   document.getElementById('theme-btn')?.addEventListener('click', () => toggleTheme());
   onLangChange(refreshButtons);
+  onLangChange(applyTitle);
   onThemeChange(refreshButtons);
   // Expose for operator custom_js that used the old event names.
   document.documentElement.setAttribute('data-lang', getLang());

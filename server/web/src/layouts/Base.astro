@@ -1,22 +1,22 @@
 ---
 /**
  * Shared document shell: meta, pre-paint theme/language bootstrap, the
- * synchronous navbar-config load (title, favicon, glass mode, operator
- * custom CSS/JS) and the global stylesheet.
+ * synchronous navbar-config load (localized tab title, favicon, glass mode,
+ * operator custom CSS/JS) and the global stylesheet.
  */
 import '../styles/global.css';
 
 interface Props {
   title: string;
   description?: string;
-  /** Prefix added before the site name in the tab title ("Admin", "Login"). */
-  titlePrefix?: string;
+  /** Page key for the localized tab title prefix ("admin" → "Admin" / "管理"). */
+  page?: 'admin' | 'login';
 }
-const { title, description = 'Pulse-DS — real-time server and hardware monitoring.', titlePrefix = '' } = Astro.props;
+const { title, description = 'Pulse-DS — real-time server and hardware monitoring.', page = '' } = Astro.props;
 const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
 ---
 
-<html lang="en" class="dark" data-api-base={apiBase} data-title-prefix={titlePrefix}>
+<html lang="en" class="dark" data-api-base={apiBase} data-page={page}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -27,8 +27,11 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     <meta name="color-scheme" content="dark light" />
     <!-- Set below to the top bar's colour for the theme in use; theme.ts keeps it in step. -->
     <meta name="theme-color" content="#18191b" />
+    <!-- The .ico (16/32/48 px) serves browsers without SVG favicons; home screens need raster icons. -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
     <title>{title}</title>
     <script is:inline>
       (function () {
@@ -56,6 +59,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
         // Navbar config: loaded synchronously so operator custom CSS / JS is
         // in place before first paint and before DOMContentLoaded.
         var glass = false;
+        var site = 'Pulse-DS';
         try {
           var xhr = new XMLHttpRequest();
           xhr.open('GET', '/api/navbar/config', false);
@@ -63,16 +67,24 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
           if (xhr.status === 200) {
             var cfg = JSON.parse(xhr.responseText);
             window.__navbarConfig = cfg;
-            var prefix = html.getAttribute('data-title-prefix') || '';
-            var site = (cfg.text && String(cfg.text).trim()) || 'Pulse-DS';
-            document.title = prefix ? prefix + ' · ' + site : site;
+            site = (cfg.text && String(cfg.text).trim()) || site;
             if (cfg.logo && /^(https?:\/\/|\/|data:image)/i.test(String(cfg.logo).trim())) {
-              var fav = document.querySelector('link[rel="icon"]');
-              if (fav) {
-                fav.href = String(cfg.logo).trim();
-                var ext = fav.href.toLowerCase().split('?')[0].split('.').pop();
-                var types = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', ico: 'image/x-icon' };
-                if (types[ext]) fav.type = types[ext]; else fav.removeAttribute('type');
+              // The operator's logo replaces every tab icon, so the browser
+              // cannot fall back to the default .ico or .svg.
+              var logo = String(cfg.logo).trim();
+              var ext = logo.toLowerCase().split('?')[0].split('.').pop();
+              var types = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', ico: 'image/x-icon' };
+              var icons = document.querySelectorAll('link[rel="icon"]');
+              for (var i = icons.length - 1; i >= 0; i--) {
+                if (i > 0) { icons[i].parentNode.removeChild(icons[i]); continue; }
+                icons[i].href = logo;
+                icons[i].removeAttribute('sizes');
+                if (types[ext]) icons[i].type = types[ext]; else icons[i].removeAttribute('type');
+              }
+              // Home screens only take raster images: a PNG or JPEG logo can stand in.
+              if (/^data:image\/(png|jpeg)/i.test(logo) || /\.(png|jpe?g)$/i.test(logo.split('?')[0])) {
+                var touch = document.querySelector('link[rel="apple-touch-icon"]');
+                if (touch) touch.href = logo;
               }
             }
             if (cfg.show_glass) html.classList.add('glass-enabled');
@@ -94,6 +106,12 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
             }
           }
         } catch (e) {}
+
+        // Tab title in the page's language: "管理 · Pulse-DS" / "Admin · Pulse-DS".
+        // nav.ts keeps it in step when the language is switched.
+        var pages = { admin: ['Admin', '管理'], login: ['Login', '登录'] };
+        var pageName = pages[html.getAttribute('data-page') || ''];
+        document.title = pageName ? pageName[lang === 'zh' ? 1 : 0] + ' · ' + site : site;
 
         // Browser chrome (the iPhone status bar, Safari's tinted tab bar)
         // takes the top bar's colour for the theme chosen here, not the OS's.

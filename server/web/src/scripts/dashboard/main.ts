@@ -107,6 +107,10 @@ function computeView(): void {
   state.view = sortServers(filtered, state.sort, state.dir);
 }
 
+// "10 台独服 · 1 台等待探针" may wrap on a phone, but only between parts:
+// a non-breaking space keeps each count with its noun ("1" never ends a line).
+const keepParts = (s: string) => s.split(' · ').map((x) => x.replace(/ /g, '\u00a0')).join(' · ');
+
 function renderStats(): void {
   const total = state.all.length;
   const online = state.all.filter((s) => s.online).length;
@@ -118,10 +122,27 @@ function renderStats(): void {
   const vps = state.all.filter((s) => s.type === 'VPS').length;
   const set = (k: string, v: string) => {
     const e = document.querySelector<HTMLElement>(`[data-stat="${k}"]`);
-    if (e && e.textContent !== v) e.textContent = v;
+    if (!e || e.textContent === v) return;
+    e.textContent = v;
+    if (k.endsWith('-sub')) e.title = v;
   };
   set('total', String(total));
-  set('total-sub', [ds ? t('dash.stat.dsCount', { n: ds }) : '', vps ? t('dash.stat.vpsCount', { n: vps }) : ''].filter(Boolean).join(' · '));
+  // The parts add up to the total: hosts still waiting for their agent have no
+  // type yet, and an agent may report a type that is neither DS nor VPS.
+  const pending = state.all.filter((s) => !s.reported && s.type !== 'DS' && s.type !== 'VPS').length;
+  const other = total - ds - vps - pending;
+  set(
+    'total-sub',
+    [
+      ds ? t('dash.stat.dsCount', { n: ds }) : '',
+      vps ? t('dash.stat.vpsCount', { n: vps }) : '',
+      other > 0 ? t('dash.stat.otherCount', { n: other }) : '',
+      pending ? t('dash.stat.pendingCount', { n: pending }) : '',
+    ]
+      .filter(Boolean)
+      .map(keepParts)
+      .join(' · '),
+  );
   set('online', String(online));
   set('online-sub', total ? `${Math.round((online / Math.max(1, total)) * 100)}%` : '');
   set('offline', String(offline));
@@ -129,7 +150,7 @@ function renderStats(): void {
   const sep = getLang() === 'zh' ? '、' : ', ';
   set('offline-sub', offNames.length ? (offNames.length <= 2 ? offNames.join(sep) : `${offNames[0]} +${offNames.length - 1}`) : '');
   set('attention', String(crit + warn));
-  set('attention-sub', crit + warn ? t('dash.stat.attentionSub', { crit, warn }) : withHw ? t('dash.stat.allGood') : t('dash.stat.noHardware'));
+  set('attention-sub', keepParts(crit + warn ? t('dash.stat.attentionSub', { crit, warn }) : withHw ? t('dash.stat.allGood') : t('dash.stat.noHardware')));
   document.querySelector<HTMLElement>('[data-stat="offline"]')?.classList.toggle('is-nonzero', offline > 0);
   const attVal = document.querySelector<HTMLElement>('[data-stat="attention"]');
   if (attVal) attVal.classList.toggle('is-nonzero', crit + warn > 0);
@@ -150,7 +171,8 @@ function emptyHtml(kind: 'none' | 'filtered' | 'error', msg = ''): string {
   if (kind === 'filtered') {
     return `<div class="py-16 text-center"><div class="inline-flex w-11 h-11 items-center justify-center rounded-xl subcard mb-3 t-3">${icon('filter', 20)}</div><div class="text-[14px] font-semibold">${esc(t('dash.empty.filtered'))}</div><button type="button" class="btn btn-sm mt-4" data-clear-filters>${esc(t('dash.empty.clear'))}</button></div>`;
   }
-  return `<div class="py-16 text-center"><div class="inline-flex w-11 h-11 items-center justify-center rounded-xl subcard mb-3 t-3">${icon('server', 20)}</div><div class="text-[14px] font-semibold">${esc(t('dash.empty.title'))}</div><div class="text-[12px] t-3 mt-1">${esc(t('dash.empty.desc'))}</div></div>`;
+  // A fresh install shows this first: point the operator at the next step.
+  return `<div class="py-16 text-center"><div class="inline-flex w-11 h-11 items-center justify-center rounded-xl subcard mb-3 t-3">${icon('server', 20)}</div><div class="text-[14px] font-semibold">${esc(t('dash.empty.title'))}</div><div class="text-[12px] t-3 mt-1">${esc(t('dash.empty.desc'))}</div><a class="btn btn-sm mt-4" href="/admin">${icon('plus', 14)}<span>${esc(t('dash.empty.add'))}</span></a></div>`;
 }
 
 function clearRows(): void {

@@ -518,13 +518,13 @@ html.kb :focus-visible {
 }
 .tabs,
 .modal-body,
-.dtable-wrap,
+.dtable-scroll,
 .tp-targets {
   scrollbar-width: none;
 }
 .tabs::-webkit-scrollbar,
 .modal-body::-webkit-scrollbar,
-.dtable-wrap::-webkit-scrollbar,
+.dtable-scroll::-webkit-scrollbar,
 .tp-targets::-webkit-scrollbar {
   display: none;
 }
@@ -820,13 +820,18 @@ html.kb :focus-visible {
 }
 .stat.tone-crit .stat-value.is-nonzero { color: var(--crit); }
 .stat.tone-warn .stat-value.is-nonzero { color: var(--warn); }
+/* Up to two lines rather than a one-line cut: the fleet breakdown and long
+   server names wrap on narrow tiles; the full text is also the tooltip. */
 .stat-sub {
   font-size: 12px;
   color: var(--text-3);
   min-height: 18px;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  word-break: keep-all; /* no break inside 等待探针; breaks fall at the separators */
 }
 @media (max-width: 767px) {
   .stat-strip {
@@ -1287,10 +1292,27 @@ body.modal-open {
     min-width: 0;
   }
 }
+/* The frame keeps its border while the inner scroller fades at an edge that
+   hides more columns (toggled by updateScrollHint in hardware.ts). */
 .dtable-wrap {
-  overflow-x: auto;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+}
+.dtable-scroll {
+  overflow-x: auto;
+}
+.dtable-scroll.more-right {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+.dtable-scroll.more-left {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent);
+}
+.dtable-scroll.more-left.more-right {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
 }
 .issue {
   display: flex;
