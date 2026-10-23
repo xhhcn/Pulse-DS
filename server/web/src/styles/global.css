@@ -851,8 +851,10 @@ html.kb :focus-visible {
 /* ============================================================
    Server table
    ============================================================ */
+/* Uptime is 84 px: room for the longest offline label ("离线 23 小时",
+   "Offline 365d") with the same air before the flag as elsewhere in the row. */
 .srv-table {
-  --cols: minmax(220px, 2.4fr) 92px 56px 56px minmax(100px, 1fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(170px, 1.3fr) 40px;
+  --cols: minmax(220px, 2.4fr) 92px 84px 56px minmax(100px, 1fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(170px, 1.3fr) 40px;
 }
 .srv-head,
 .srv-row {
@@ -980,7 +982,7 @@ html.kb .copy-btn:focus-visible {
    OS glyph, then uptime and location, then network. Cards only on phones. */
 @media (max-width: 1279px) {
   .srv-table {
-    --cols: minmax(180px, 2.2fr) 92px 56px 56px minmax(90px, 1fr) minmax(90px, 1fr) minmax(90px, 1fr) minmax(150px, 1.2fr);
+    --cols: minmax(180px, 2.2fr) 92px 84px 56px minmax(90px, 1fr) minmax(90px, 1fr) minmax(90px, 1fr) minmax(150px, 1.2fr);
   }
   .srv-head > .c-os,
   .srv-row > .c-os {

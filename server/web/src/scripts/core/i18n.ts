@@ -79,7 +79,7 @@ const D: Record<string, [string, string]> = {
   'dash.stat.vpsCount': ['{n} VPS', '{n} 台 VPS'],
   'dash.stat.pendingCount': ['{n} awaiting agent', '{n} 台等待探针'],
   'dash.stat.otherCount': ['{n} other', '{n} 台其他'],
-  'dash.offlineFor': ['offline {t}', '离线 {t}'],
+  'dash.offlineFor': ['Offline {t}', '离线 {t}'],
   'dash.lastReport': ['Last report {t}', '最后上报 {t}'],
   'dash.col.server': ['Server', '服务器'],
   'dash.col.health': ['Health', '健康'],
