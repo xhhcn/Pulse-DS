@@ -24,6 +24,9 @@ let rendered = false;
 let orderSaving = false;
 let heldSnapshot: any[] | null = null;
 let sse: SSEClient | null = null;
+// The fleet-wide agent secret for the install commands. Live rows no longer
+// carry it (the stream never sends secrets), so it comes from the settings.
+let sharedSecret = '';
 
 const modals: Record<string, Modal> = {};
 
@@ -97,13 +100,15 @@ function psQuote(v: unknown): string {
 }
 
 function linuxCommand(s: any): string {
+  const secret = s.secret || sharedSecret;
   let cmd = `curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/client/install.sh | sudo bash -s -- --id ${shellQuote(s.id)} --server ${shellQuote(window.location.origin)}`;
-  if (s.secret) cmd += ` --secret ${shellQuote(s.secret)}`;
+  if (secret) cmd += ` --secret ${shellQuote(secret)}`;
   return cmd;
 }
 function windowsCommand(s: any): string {
+  const secret = s.secret || sharedSecret;
   let cmd = `powershell -ExecutionPolicy Bypass -Command "& { \`$env:AgentId=${psQuote(s.id)}; \`$env:ServerBase=${psQuote(window.location.origin)}`;
-  if (s.secret) cmd += `; \`$env:Secret=${psQuote(s.secret)}`;
+  if (secret) cmd += `; \`$env:Secret=${psQuote(secret)}`;
   cmd += `; irm https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/client/install.ps1 | iex }"`;
   return cmd;
 }
@@ -566,11 +571,11 @@ function randomToken(len: number, chars: string): string {
 
 function targetRow(target: { name: string; address: string } = { name: '', address: '' }): HTMLElement {
   const div = document.createElement('div');
-  div.className = 'target-row grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2';
+  div.className = 'target-row';
   div.innerHTML = `
     <input class="input input-sm t-name" data-i18n-placeholder="tcping.targetName" value="${attr(target.name)}" />
     <input class="input input-sm t-addr mono" placeholder="8.8.8.8:53" value="${attr(target.address)}" />
-    <button type="button" class="btn btn-sm t-remove" title="${attr(t('tcping.remove'))}">${icon('x', 13)}<span class="sm:hidden" data-i18n="tcping.remove"></span></button>`;
+    <button type="button" class="btn btn-sm t-remove" title="${attr(t('tcping.remove'))}" aria-label="${attr(t('tcping.remove'))}">${icon('x', 13)}</button>`;
   div.querySelector('.t-remove')?.addEventListener('click', () => div.remove());
   applyI18n(div);
   return div;
@@ -607,6 +612,7 @@ async function loadSettings(): Promise<void> {
     getJSON('/api/tcping/config').catch(() => ({})),
   ]);
   navbarCfg = nav || {};
+  if (navbarCfg.shared_secret) sharedSecret = navbarCfg.shared_secret;
   privacyCfg = priv || {};
   secretPending = false;
   pendingShareToken = privacyCfg.share_token || '';
@@ -955,6 +961,11 @@ async function boot(): Promise<void> {
     modals[k] = new Modal(document.getElementById(`${k}-modal`) as HTMLElement);
   });
   wireList();
+  getJSON<any>('/api/navbar/config')
+    .then((cfg) => {
+      if (cfg && cfg.shared_secret) sharedSecret = cfg.shared_secret;
+    })
+    .catch(() => {});
   setupAdd();
   setupEdit();
   setupDelete();

@@ -142,6 +142,8 @@ const D: Record<string, [string, string]> = {
   'detail.issues': ['Issues', '问题'],
   'detail.noIssues': ['No hardware issues detected', '未检测到硬件问题'],
   'detail.noHardware': ['This agent does not report hardware details yet.', '该探针尚未上报硬件详情。'],
+  'detail.hwLoading': ['Loading hardware details…', '正在加载硬件信息…'],
+  'detail.hwFailed': ['Could not load the hardware details; retrying shortly.', '硬件信息加载失败，稍后自动重试。'],
   'detail.hwCollected': ['Collected', '采集于'],
   'detail.tags': ['Tags', '标签'],
   'detail.model': ['Model', '型号'],

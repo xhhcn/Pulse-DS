@@ -2,14 +2,17 @@ package main
 
 import (
 	"bytes"
+	"compress/flate"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"io/fs"
 	"log"
@@ -17,7 +20,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -126,6 +128,32 @@ type SystemMetric struct {
 	HealthIssues   []string      `json:"health_issues,omitempty"`
 	HealthIssuesEN []string      `json:"health_issues_en,omitempty"`
 	HealthCritical int           `json:"health_critical,omitempty"`
+}
+
+// streamMetric is how a system travels on the SSE stream: the full record
+// minus the hardware inventory and the agent secret. The inventory is most of
+// every frame yet changes about once a minute, so the stream only says when it
+// was collected (hardware_at) and the dashboard fetches it for the host whose
+// dialog is open (GET /api/metrics?id=…). The secret is the fleet-wide shared
+// secret; the admin page reads it from its settings rather than every frame,
+// and keeping it off the stream also keeps it out of the compressed frames.
+type streamMetric struct {
+	SystemMetric
+	Hardware   *HardwareInfo `json:"hardware,omitempty"` // shadows SystemMetric.Hardware; always nil
+	Secret     string        `json:"secret,omitempty"`   // shadows SystemMetric.Secret; always empty
+	HardwareAt *time.Time    `json:"hardware_at,omitempty"`
+}
+
+func streamSnapshot(metrics []SystemMetric) []streamMetric {
+	out := make([]streamMetric, len(metrics))
+	for i := range metrics {
+		out[i].SystemMetric = metrics[i]
+		if hw := metrics[i].Hardware; hw != nil {
+			at := hw.CollectedAt
+			out[i].HardwareAt = &at
+		}
+	}
+	return out
 }
 
 // TCPingTargetData represents the latest tcping data for a specific target
@@ -1305,123 +1333,9 @@ func main() {
 			log.Fatalf("❌ Failed to access embedded files: %v", err)
 		}
 
-		// setStaticCacheHeaders mirrors the two-tier caching strategy the
-		// nginx config uses in Docker mode (see docker/nginx.conf). Without
-		// this, the standalone binary would serve /admin/index.html with
-		// whatever Go's http.FileServer produces by default — Last-Modified
-		// only, no Cache-Control — and browsers would happily keep the
-		// stale HTML in their disk cache across deployments, so newly
-		// added UI elements (e.g. the Download Backup button) would
-		// silently fail to appear after an upgrade. The two rules are:
-		//
-		//   1. HTML entrypoints (*.html and the directory-less SPA
-		//      routes like /admin, /login) → Cache-Control: no-cache,
-		//      must-revalidate. The ETag we still get from http.FileServer
-		//      means a revalidation costs a cheap 304 when the file really
-		//      hasn't changed, while guaranteeing we notice when it has.
-		//
-		//   2. Content-addressed bundle assets under /_astro/ (Astro
-		//      fingerprints every filename with an 8-char content hash, so
-		//      a changed asset is always served under a new URL) →
-		//      Cache-Control: public, max-age=31536000, s-maxage=31536000,
-		//      immutable. "immutable" tells the browser not even to revalidate;
-		//      s-maxage makes the CDN policy explicit.
-		//
-		//   3. Non-fingerprinted static files such as favicon.svg / robots.txt
-		//      get a short browser TTL and a modest CDN TTL. They are cacheable,
-		//      but not immutable because their URL does not change on deploy.
-		isStaticAssetPath := func(urlPath string) bool {
-			switch strings.ToLower(filepath.Ext(urlPath)) {
-			case ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff", ".woff2":
-				return true
-			default:
-				return false
-			}
-		}
-
-		setStaticCacheHeaders := func(w http.ResponseWriter, urlPath string) {
-			switch {
-			case strings.HasSuffix(urlPath, ".html") || urlPath == "/" || filepath.Ext(urlPath) == "":
-				w.Header().Set("Cache-Control", "no-cache, must-revalidate")
-			case strings.HasPrefix(urlPath, "/_astro/"):
-				w.Header().Set("Cache-Control", "public, max-age=31536000, s-maxage=31536000, immutable")
-			case urlPath == "/favicon.svg" || urlPath == "/robots.txt":
-				w.Header().Set("Cache-Control", "public, max-age=3600, s-maxage=86400")
-			case isStaticAssetPath(urlPath):
-				w.Header().Set("Cache-Control", "public, max-age=86400, s-maxage=604800")
-			}
-		}
-
-		// Create a handler that combines API routes and static files
-		finalHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Try API routes first
-			if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/healthz" {
-				mux.ServeHTTP(w, r)
-				return
-			}
-
-			// Handle static files. Reject invalid filesystem paths before
-			// any embedded-FS lookup or SPA fallback so traversal probes such
-			// as /../admin never turn into a successful index.html response.
-			path, ok := staticFilePathFromURL(r.URL.Path)
-			if !ok {
-				http.NotFound(w, r)
-				return
-			}
-
-			// Try to open the file from embedded FS
-			if f, err := distFS.Open(path); err == nil {
-				f.Close()
-				setStaticCacheHeaders(w, r.URL.Path)
-				http.FileServer(http.FS(distFS)).ServeHTTP(w, r)
-				return
-			}
-
-			// File doesn't exist - try directory index.html
-			// For paths like /admin, /login, try opening admin/index.html, login/index.html
-			if filepath.Ext(path) == "" {
-				// Remove trailing slash if present
-				cleanPath := strings.TrimSuffix(path, "/")
-				indexPath := cleanPath + "/index.html"
-
-				if f, err := distFS.Open(indexPath); err == nil {
-					defer f.Close()
-					content, err := io.ReadAll(f)
-					if err != nil {
-						http.Error(w, "failed to read file", http.StatusInternalServerError)
-						return
-					}
-					w.Header().Set("Content-Type", "text/html; charset=utf-8")
-					setStaticCacheHeaders(w, r.URL.Path)
-					w.Write(content)
-					return
-				}
-
-				// No directory index, serve root index.html for SPA routing
-				indexFile, err := distFS.Open("index.html")
-				if err != nil {
-					http.Error(w, "index.html not found", http.StatusNotFound)
-					return
-				}
-				defer indexFile.Close()
-
-				content, err := io.ReadAll(indexFile)
-				if err != nil {
-					http.Error(w, "failed to read index.html", http.StatusInternalServerError)
-					return
-				}
-
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				setStaticCacheHeaders(w, r.URL.Path)
-				w.Write(content)
-				return
-			}
-
-			// File with extension not found
-			http.NotFound(w, r)
-		})
-
-		handler = corsMiddleware(cdnFriendlyMiddleware(finalHandler))
+		// API routes, embedded files and SPA fallbacks; caching, compression
+		// and validators are described on staticHandler (static.go).
+		handler = corsMiddleware(cdnFriendlyMiddleware(newStaticHandler(distFS, mux)))
 	} else {
 		// Docker mode: only serve API (Nginx handles static files)
 		log.Printf("🌐 Backend listening on %s (Docker mode - Nginx serves frontend)", addr)
@@ -1533,9 +1447,10 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.Request) {
 	// Determine the subscriber's admin status first. Anyone with a valid admin
 	// session (cookie / Authorization header / admin_token query param) is an
-	// admin subscriber and will receive payloads that still contain IPv4, IPv6
-	// and Secret. Everyone else is a public subscriber and receives payloads
-	// with those fields stripped server-side before they ever hit the wire.
+	// admin subscriber and will receive payloads that still contain IPv4 and
+	// IPv6. Everyone else is a public subscriber and receives payloads with
+	// those fields stripped server-side before they ever hit the wire. No
+	// view carries the agent secret or hardware inventories (streamMetric).
 	//
 	// Admin status is locked in at subscription time. This matches the
 	// existing semantics of GET /api/metrics (where the auth decision is made
@@ -1550,7 +1465,7 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 		// We validate it exactly like the Bearer-token path in isAuthenticated.
 		//
 		// If the token is valid the subscriber is upgraded to the admin view
-		// (IPv4 / IPv6 / Secret included). If the token is missing or invalid
+		// (IPv4 / IPv6 included). If the token is missing or invalid
 		// we silently fall through to the public view: the admin dashboard
 		// page guards access via /api/auth/verify at load time, so the only
 		// way to reach this code with an invalid admin_token is either
@@ -1614,10 +1529,27 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 	// a keep-alive connection reused for a later request is not left with a
 	// stale, already-expired write deadline.
 	defer rc.SetWriteDeadline(time.Time{})
+	// Compress the stream when the browser accepts it (every browser's
+	// EventSource does): a frame is JSON repeating the same keys for every
+	// host and shrinks about 4.5-fold. See sseGzip for why each frame is
+	// compressed on its own. Frames carry no secrets (streamMetric), so their
+	// compressed size cannot leak one.
+	var gz *sseGzip
+	if acceptsGzip(r) {
+		gz = &sseGzip{}
+		defer func() { _ = gz.close(w); _ = rc.Flush() }()
+	}
+
 	// parts are written back to back so a multi-hundred-KB snapshot is never
 	// copied into a fresh string per subscriber just to add the SSE framing.
 	writeEvent := func(parts ...string) bool {
 		_ = rc.SetWriteDeadline(time.Now().Add(sseWriteTimeout))
+		if gz != nil {
+			if gz.write(w, parts...) != nil {
+				return false
+			}
+			return rc.Flush() == nil
+		}
 		for _, part := range parts {
 			if _, werr := io.WriteString(w, part); werr != nil {
 				return false
@@ -1626,9 +1558,14 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 		return rc.Flush() == nil
 	}
 
-	// Set headers for SSE with CDN support
+	// Set headers for SSE with CDN support. no-transform asks proxies and
+	// CDNs to pass the stream through as is (no re-compression or buffering).
 	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private")
+	if gz != nil {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Add("Vary", "Accept-Encoding")
+	}
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private, no-transform")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
 	w.Header().Set("Connection", "keep-alive")
@@ -1674,7 +1611,7 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 			if b, merr := json.Marshal(map[string]interface{}{
 				"type":    "metric_updated",
 				"view":    viewName,
-				"systems": snapshot,
+				"systems": streamSnapshot(snapshot),
 				"count":   len(snapshot),
 			}); merr == nil {
 				payload, havePayload = string(b), true
@@ -1813,11 +1750,12 @@ func buildMetricsSnapshot(store *Store, registry *ClientRegistry, authenticated 
 // broadcastMetricsSnapshot fans out the authoritative latest state of the
 // system list to every SSE subscriber. Two distinct payloads are prepared:
 //
-//   - A "public" payload with IPv4 / IPv6 / Secret stripped, delivered to
-//     anonymous and share-token subscribers.
-//   - An "admin" payload with everything intact, delivered to authenticated
+//   - A "public" payload with IPv4 / IPv6 stripped, delivered to anonymous
+//     and share-token subscribers.
+//   - An "admin" payload with the addresses kept, delivered to authenticated
 //     admin subscribers.
 //
+// Neither carries hardware inventories or the agent secret (streamMetric).
 // Because each payload carries the complete state, any subscriber whose
 // buffer drops an older event still converges to the correct view on the
 // next broadcast — we never rely on the frontend reconstructing state from a
@@ -1842,13 +1780,14 @@ func broadcastMetricsSnapshot(store *Store, registry *ClientRegistry, broker *SS
 		return
 	}
 
+	// Frames carry no hardware inventory (see streamMetric), so the public
+	// copy only needs the addresses removed.
 	publicMetrics := make([]SystemMetric, len(adminMetrics))
 	copy(publicMetrics, adminMetrics)
 	for i := range publicMetrics {
 		publicMetrics[i].IPv4 = ""
 		publicMetrics[i].IPv6 = ""
 		publicMetrics[i].Secret = ""
-		publicMetrics[i].Hardware = maskHardwareForPublic(publicMetrics[i].Hardware)
 	}
 
 	// "view" tells the subscriber which masking it received. The admin
@@ -1858,7 +1797,7 @@ func broadcastMetricsSnapshot(store *Store, registry *ClientRegistry, broker *SS
 	publicJSON, err := json.Marshal(map[string]interface{}{
 		"type":    "metric_updated",
 		"view":    "public",
-		"systems": publicMetrics,
+		"systems": streamSnapshot(publicMetrics),
 		"count":   len(publicMetrics),
 	})
 	if err != nil {
@@ -1868,7 +1807,7 @@ func broadcastMetricsSnapshot(store *Store, registry *ClientRegistry, broker *SS
 	adminJSON, err := json.Marshal(map[string]interface{}{
 		"type":    "metric_updated",
 		"view":    "admin",
-		"systems": adminMetrics,
+		"systems": streamSnapshot(adminMetrics),
 		"count":   len(adminMetrics),
 	})
 	if err != nil {
@@ -1924,7 +1863,101 @@ func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ?id= narrows the answer to one system: the dashboard fetches a host's
+	// hardware this way when its dialog opens (the SSE stream carries none).
+	// Same checks and masking as the full list, so it never shows more than
+	// the list would; the agent secret is left out, as nothing displays it.
+	if id := r.URL.Query().Get("id"); id != "" {
+		one := make([]SystemMetric, 0, 1)
+		for _, m := range metrics {
+			if m.ID == id {
+				m.Secret = ""
+				one = append(one, m)
+				break
+			}
+		}
+		metrics = one
+	}
+
 	writeJSON(w, http.StatusOK, metrics)
+}
+
+// sseGzip writes one SSE response as a gzip stream in which every frame is a
+// self-contained deflate segment: compressed by a fresh (pooled) compressor
+// and ended with a sync flush, so it never refers back to earlier frames and
+// arrives at once. A compressor that lived as long as the connection would
+// cost ~0.8 MB per open stream — at the stream caps that is gigabytes an
+// anonymous client could pin down — while this keeps a compressed stream as
+// cheap as a plain one; sseDeflateSlots bounds the compressors in use.
+type sseGzip struct {
+	started bool
+	crc     uint32
+	size    uint32
+}
+
+var (
+	sseDeflaters    = sync.Pool{New: func() interface{} { zw, _ := flate.NewWriter(nil, flate.DefaultCompression); return zw }}
+	sseDeflateSlots = make(chan struct{}, 4)
+	gzipStreamHead  = []byte{0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255} // no name, no mtime, OS unknown
+)
+
+func (g *sseGzip) write(w io.Writer, parts ...string) error {
+	plain := []byte(strings.Join(parts, ""))
+	g.crc = crc32.Update(g.crc, crc32.IEEETable, plain)
+	g.size += uint32(len(plain))
+
+	var buf bytes.Buffer
+	if !g.started {
+		buf.Write(gzipStreamHead)
+		g.started = true
+	}
+	sseDeflateSlots <- struct{}{}
+	zw := sseDeflaters.Get().(*flate.Writer)
+	zw.Reset(&buf)
+	_, err := zw.Write(plain)
+	if err == nil {
+		err = zw.Flush()
+	}
+	sseDeflaters.Put(zw)
+	<-sseDeflateSlots
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(buf.Bytes())
+	return err
+}
+
+// close ends the stream properly (an empty final block, then the CRC-32 and
+// length of everything sent), so a clean shutdown reads as complete.
+func (g *sseGzip) close(w io.Writer) error {
+	if !g.started {
+		return nil
+	}
+	tail := []byte{0x03, 0x00, 0, 0, 0, 0, 0, 0, 0, 0}
+	binary.LittleEndian.PutUint32(tail[2:], g.crc)
+	binary.LittleEndian.PutUint32(tail[6:], g.size)
+	_, err := w.Write(tail)
+	return err
+}
+
+// acceptsGzip reports whether the request's Accept-Encoding allows gzip;
+// an explicit "gzip;q=0" refusal counts as no.
+func acceptsGzip(r *http.Request) bool {
+	for _, part := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
+		coding, params, _ := strings.Cut(part, ";")
+		coding = strings.ToLower(strings.TrimSpace(coding))
+		if coding != "gzip" && coding != "*" {
+			continue
+		}
+		q := strings.ToLower(strings.ReplaceAll(params, " ", ""))
+		if strings.HasPrefix(q, "q=") {
+			if v, err := strconv.ParseFloat(strings.TrimPrefix(q, "q="), 64); err == nil && v <= 0 {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.Request) {

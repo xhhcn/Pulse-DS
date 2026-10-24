@@ -38,14 +38,39 @@ export interface Server {
   /** False for a system that was added in the admin page but whose agent has never pushed. */
   reported: boolean;
   hideTcping: boolean;
+  /** The agent reports a hardware inventory (its contents may not be loaded yet). */
+  hasHw: boolean;
+  /** The inventory, from the last fetch; null until one has been loaded. */
   hardware: any | null;
+  /** A newer collection exists than the loaded `hardware`. */
+  hwStale: boolean;
+  /** When the agent collected its latest inventory ('' without hardware). */
+  hwAt: string;
   hwSig: string;
   tcpingSig: string;
 }
 
+/*
+ * Hardware inventories are not part of the live stream (they are most of its
+ * size and change once a minute); a frame only says when the host's inventory
+ * was collected (`hardware_at`). The inventory itself is fetched for the host
+ * whose dialog is open and kept here, so later frames reuse it. A newer
+ * collection marks it stale; the old copy stays on screen until the new one
+ * has arrived, so an open hardware tab never blanks.
+ */
+const hwCache = new Map<string, { at: string; hw: any }>();
+
+export function rememberHardware(id: string, hw: any): void {
+  if (hw && typeof hw === 'object') hwCache.set(id, { at: String(hw.collected_at || ''), hw });
+}
+
+export function hasHardware(raw: any): boolean {
+  return !!(raw?.hardware && typeof raw.hardware === 'object') || !!raw?.hardware_at;
+}
+
 export function healthKeyOf(raw: any): HealthKey {
   const h = String(raw?.health || '');
-  const hasHw = !!(raw?.hardware && typeof raw.hardware === 'object');
+  const hasHw = hasHardware(raw);
   if (h === 'ok' || h === 'warn' || h === 'critical') return h;
   // "unknown" without any hardware snapshot means the agent simply does not
   // report hardware (VPS / old agent): show nothing rather than "Unknown".
@@ -68,10 +93,15 @@ export function normalize(raw: any): Server {
   const enIssues: string[] = Array.isArray(raw?.health_issues_en) ? raw.health_issues_en.map(String) : [];
   const issues = getLang() !== 'zh' && enIssues.length === zhIssues.length ? enIssues : zhIssues;
   const tags = Array.isArray(raw?.tags) ? raw.tags.filter((t: unknown) => typeof t === 'string') : [];
-  const hw = raw?.hardware && typeof raw.hardware === 'object' ? raw.hardware : null;
+  const id = String(raw?.id ?? '');
+  const hasHw = hasHardware(raw);
+  if (raw?.hardware && typeof raw.hardware === 'object') rememberHardware(id, raw.hardware);
+  const cached = hasHw ? hwCache.get(id) : undefined;
+  const hw = cached ? cached.hw : null;
+  const hwAt = String(raw?.hardware?.collected_at || raw?.hardware_at || '');
   const health = healthKeyOf(raw);
   return {
-    id: String(raw?.id ?? ''),
+    id,
     name: String(raw?.name || 'unknown'),
     raw,
     online: !(raw?.alert === true),
@@ -102,8 +132,11 @@ export function normalize(raw: any): Server {
     // first push, which parses to a negative timestamp.
     reported: Date.parse(String(raw?.updated_at || '')) > 0,
     hideTcping: raw?.hide_tcping === true,
+    hasHw,
     hardware: hw,
-    hwSig: hw ? `${health}|${hw.collected_at || ''}|${issues.join(';')}` : '',
+    hwStale: !!cached && cached.at !== hwAt,
+    hwAt,
+    hwSig: hw ? `${health}|${cached!.at}|${issues.join(';')}` : '',
     tcpingSig: tcpingSignature(raw),
   };
 }

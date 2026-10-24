@@ -79,21 +79,35 @@ export interface SSEOptions {
   onState?: (state: SSEState) => void;
 }
 
+/** How long a hidden tab keeps its stream before pausing it. */
+const HIDDEN_GRACE_MS = 15_000;
+
 /**
  * EventSource wrapper with exponential backoff + a 45 s liveness watchdog
  * (the server emits either a state frame every ~3 s or a keepalive every
  * 15 s, so 45 s of silence means the socket is half-open).
+ *
+ * A tab nobody is looking at does not need a frame every three seconds: after
+ * HIDDEN_GRACE_MS in the background the stream is closed, and it is reopened
+ * the moment the tab is visible again — the snapshot the server sends on
+ * connect brings the page up to date at once.
  */
 export class SSEClient {
   private es: EventSource | null = null;
   private attempt = 0;
   private watchdog: number | null = null;
   private reconnectTimer: number | null = null;
+  private hiddenTimer: number | null = null;
   private closed = false;
+  private paused = false;
+  private watchingVisibility = false;
   constructor(private opts: SSEOptions) {}
 
   connect(): void {
     this.closed = false;
+    this.paused = false;
+    this.watchVisibility();
+    if (this.reconnectTimer) { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     this.teardown();
     let url = apiBase() + '/api/events';
     const st = shareToken();
@@ -126,6 +140,38 @@ export class SSEClient {
     this.closed = true;
     this.teardown();
     if (this.reconnectTimer) { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    if (this.hiddenTimer) { window.clearTimeout(this.hiddenTimer); this.hiddenTimer = null; }
+  }
+
+  private watchVisibility(): void {
+    if (this.watchingVisibility) return;
+    this.watchingVisibility = true;
+    document.addEventListener('visibilitychange', () => {
+      if (this.closed) return;
+      if (document.visibilityState === 'hidden') {
+        if (!this.hiddenTimer && !this.paused) {
+          this.hiddenTimer = window.setTimeout(() => {
+            this.hiddenTimer = null;
+            this.pause();
+          }, HIDDEN_GRACE_MS);
+        }
+        return;
+      }
+      if (this.hiddenTimer) { window.clearTimeout(this.hiddenTimer); this.hiddenTimer = null; }
+      // Resume a paused stream; also recover one the browser dropped while the
+      // page was in the background (mobile browsers do), instead of waiting
+      // for the watchdog.
+      if (this.paused || !this.es || this.es.readyState === EventSource.CLOSED) {
+        this.attempt = 0;
+        this.connect();
+      }
+    });
+  }
+
+  private pause(): void {
+    this.paused = true;
+    this.teardown();
+    if (this.reconnectTimer) { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
   }
 
   private teardown(): void {
@@ -142,7 +188,7 @@ export class SSEClient {
   }
 
   private scheduleReconnect(): void {
-    if (this.closed || this.reconnectTimer) return;
+    if (this.closed || this.paused || this.reconnectTimer) return;
     this.opts.onState?.(this.attempt >= 3 ? 'offline' : 'reconnecting');
     const base = Math.min(30_000, 1000 * Math.pow(2, this.attempt));
     const delay = base + Math.floor(Math.random() * 1000);

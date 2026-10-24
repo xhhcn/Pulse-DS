@@ -113,6 +113,8 @@ interface Layout {
   bottom: number;
   xs: number[]; // pixel x of every cluster
   y: (ms: number) => number;
+  /** Half the gap that breaks a line, in pixels: no hover readout further away. */
+  hoverReach: number;
 }
 
 export class TCPingPanel {
@@ -405,7 +407,14 @@ export class TCPingPanel {
     const x = (ts: number) => left + ((ts - xMin) / (xMax - xMin)) * (right - left);
     const y = (ms: number) => bottom - (ms / yMax) * (bottom - top);
     const xs = clusters.map((c) => x(c.x));
-    this.layout = { width, height, left, right, top, bottom, xs, y };
+    // A stretch with no samples at all (agent offline, server restarted) is a
+    // gap, not a straight line through readings that never existed: break
+    // wherever cycles are much further apart than usual.
+    const steps = clusters.slice(1).map((c, k) => c.x - clusters[k].x).sort((a, b) => a - b);
+    const typical = steps.length ? steps[steps.length >> 1] : 0;
+    const maxGap = Math.max(typical * 3, (cfg.interval_secs || 60) * 1000 * 2.5);
+    const hoverReach = Math.max(8, ((maxGap / 2) / (xMax - xMin)) * (right - left));
+    this.layout = { width, height, left, right, top, bottom, xs, y, hoverReach };
 
     const parts: string[] = [];
     // Grid + y labels.
@@ -426,7 +435,7 @@ export class TCPingPanel {
       parts.push(`<text x="${px.toFixed(1)}" y="${height - 7}" text-anchor="${anchor}">${esc(timeHM(new Date(ts)))}</text>`);
     }
     parts.push('</g><g class="tp-lines">');
-    // One path per target; timeouts and missing cycles break the line.
+    // One path per target; timeouts, missing cycles and gaps in time break the line.
     cfg.targets.forEach((tg, i) => {
       const color = PALETTE[i % PALETTE.length];
       const cls = !this.active ? 'tp-line' : tg.address === this.active ? 'tp-line is-active' : 'tp-line is-dim';
@@ -441,6 +450,7 @@ export class TCPingPanel {
       };
       clusters.forEach((c, k) => {
         const v = c.vals.get(tg.address);
+        if (k > 0 && c.x - clusters[k - 1].x > maxGap) flush();
         if (v == null) {
           flush();
           return;
@@ -488,6 +498,11 @@ export class TCPingPanel {
       else hi = mid;
     }
     if (lo > 0 && Math.abs(lay.xs[lo - 1] - px) <= Math.abs(lay.xs[lo] - px)) lo--;
+    // Inside a gap there is nothing to read.
+    if (Math.abs(lay.xs[lo] - px) > lay.hoverReach) {
+      this.setHover(-1);
+      return;
+    }
     this.setHover(lo, false, py);
   }
 

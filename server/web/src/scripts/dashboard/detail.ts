@@ -20,6 +20,9 @@ export interface DetailHost {
   neighbors(id: string): { prev: string | null; next: string | null };
   showTraffic(): boolean;
   showTags(): boolean;
+  /** Fetch the host's hardware inventory if it is missing or stale. */
+  loadHardware(id: string): void;
+  hardwareStatus(id: string): 'loading' | 'failed' | 'idle';
 }
 
 export function idFromHash(): string | null {
@@ -47,6 +50,7 @@ export class DetailDialog {
   private sensorOpen = new Set<string>(); // sensor groups expanded by the user (temp duplicates, voltage rails)
   private tab: Tab = 'overview';
   private hwSig = '';
+  private hwRenderedFor = '';
   private tcpSig = '';
   private tcping: TCPingPanel;
   private tcpingMounted = false;
@@ -143,6 +147,8 @@ export class DetailDialog {
     this.id = id;
     this.current = s;
     this.hwSig = '';
+    this.hwRenderedFor = '';
+    this.host.loadHardware(id);
     this.tcpSig = '';
     if (this.tcpingMounted) {
       this.tcping.unmount();
@@ -178,10 +184,11 @@ export class DetailDialog {
       this.modal.close();
       return;
     }
+    this.host.loadHardware(s.id);
     this.current = s;
     this.renderHeader(s);
     this.patchOverview(s);
-    if (s.hwSig !== this.hwSig) this.renderHardware(s);
+    if (this.hwKey(s) !== this.hwSig) this.renderHardware(s);
     this.syncTabs(s);
     if (this.tab === 'tcping' && this.tcpingMounted && s.tcpingSig !== this.tcpSig) {
       this.tcpSig = s.tcpingSig;
@@ -246,7 +253,7 @@ export class DetailDialog {
   }
 
   private availableTab(tab: Tab, s: Server): Tab {
-    if (tab === 'hardware' && !s.hardware) return 'overview';
+    if (tab === 'hardware' && !s.hasHw) return 'overview';
     if (tab === 'tcping' && (s.hideTcping || !tcpingConfigured())) return 'overview';
     return tab;
   }
@@ -255,7 +262,7 @@ export class DetailDialog {
     const hwBtn = this.root.querySelector<HTMLElement>('[data-tab="hardware"]');
     const tpBtn = this.root.querySelector<HTMLElement>('[data-tab="tcping"]');
     if (hwBtn) {
-      hwBtn.hidden = !s.hardware;
+      hwBtn.hidden = !s.hasHw;
       const badge = hwBtn.querySelector<HTMLElement>('.count');
       if (badge) {
         badge.textContent = String(s.issues.length);
@@ -414,16 +421,37 @@ export class DetailDialog {
     setHtml('mem-sub', this.memSub(s));
     setHtml('disk-sub', this.diskSub(s));
     setHtml('netkv', this.netRows(s).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join(''));
-    if (s.hwSig !== this.hwSig || !s.hardware) {
+    if (this.hwKey(s) !== this.hwSig || !s.hardware) {
       const sys = q('system');
       if (sys) sys.innerHTML = kvHtml(systemRows(s));
     }
   }
 
+  /** Changes whenever the hardware panel must be redrawn, loading state included. */
+  private hwKey(s: Server): string {
+    return s.hardware ? s.hwSig : `${s.hasHw ? this.host.hardwareStatus(s.id) : 'none'}|${s.health}|${s.issues.join(';')}`;
+  }
+
   private renderHardware(s: Server): void {
-    this.q('panel-hardware').innerHTML = renderHardware(s, this.sensorOpen);
-    if (this.tab === 'hardware') syncScrollHints(this.q('panel-hardware'));
-    this.hwSig = s.hwSig;
+    const panel = this.q('panel-hardware');
+    // Every new collection redraws the tables (about once a minute): keep each
+    // wide table where the reader had scrolled it, for the same host only.
+    const scrolled = this.hwRenderedFor === s.id ? [...panel.querySelectorAll<HTMLElement>('.dtable-scroll')].map((e) => e.scrollLeft) : [];
+    this.hwRenderedFor = s.id;
+    // Until the inventory has arrived the panel says so; "idle" without one
+    // means the host no longer has an inventory and gets the usual note.
+    const status = s.hasHw && !s.hardware ? this.host.hardwareStatus(s.id) : 'idle';
+    panel.innerHTML =
+      status === 'loading'
+        ? `<div class="subcard p-6 flex items-center justify-center gap-2 text-[13px] t-3"><span class="spinner"></span>${esc(t('detail.hwLoading'))}</div>`
+        : status === 'failed'
+          ? `<div class="subcard p-6 text-center text-[13px] t-3">${esc(t('detail.hwFailed'))}</div>`
+          : renderHardware(s, this.sensorOpen);
+    panel.querySelectorAll<HTMLElement>('.dtable-scroll').forEach((e, i) => {
+      if (scrolled[i]) e.scrollLeft = scrolled[i];
+    });
+    if (this.tab === 'hardware') syncScrollHints(panel);
+    this.hwSig = this.hwKey(s);
     const issues = this.q('panel-overview').querySelector<HTMLElement>('[data-o="issues"]');
     if (issues) {
       issues.innerHTML = renderIssues(s, this.issuesOpen);

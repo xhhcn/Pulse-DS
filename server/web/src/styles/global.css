@@ -538,6 +538,34 @@ html.kb :focus-visible {
   display: none;
 }
 
+/* TCPing targets in the settings: name · address · ✕ on one line. On a phone
+   the name keeps its ✕ beside it and the address goes underneath, and a
+   hairline separates targets, so every ✕ visibly belongs to its own pair. */
+.target-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+}
+.target-row .t-remove {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+}
+@media (max-width: 639px) {
+  .target-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'name remove' 'addr addr';
+  }
+  .target-row .t-name { grid-area: name; }
+  .target-row .t-remove { grid-area: remove; }
+  .target-row .t-addr { grid-area: addr; }
+  .target-row + .target-row {
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+    margin-top: 4px;
+  }
+}
+
 /* TCPing panel */
 .tp-targets {
   display: grid;

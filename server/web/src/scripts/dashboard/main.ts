@@ -8,7 +8,7 @@ import { HttpError, SSEClient, adminToken, apiBase, getJSON, navbarConfig, redir
 import { hydrateRemoteIcons, icon } from '../core/icons';
 import { DetailDialog, idFromHash } from './detail';
 import { renderRow, patchRow } from './row';
-import { matchesFilter, matchesQuery, normalize, sortServers, type FilterKey, type Server, type SortField } from './state';
+import { matchesFilter, matchesQuery, normalize, rememberHardware, sortServers, type FilterKey, type Server, type SortField } from './state';
 import { getTCPingConfig, invalidateTCPingConfig } from './tcping';
 
 const SORT_KEY = 'pulse.sort';
@@ -117,7 +117,7 @@ function renderStats(): void {
   const offline = total - online;
   const crit = state.all.filter((s) => s.health === 'critical').length;
   const warn = state.all.filter((s) => s.health === 'warn').length;
-  const withHw = state.all.filter((s) => s.hardware).length;
+  const withHw = state.all.filter((s) => s.hasHw).length;
   const ds = state.all.filter((s) => s.type === 'DS').length;
   const vps = state.all.filter((s) => s.type === 'VPS').length;
   const set = (k: string, v: string) => {
@@ -296,6 +296,55 @@ async function loadOnce(): Promise<void> {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Hardware on demand                                                   */
+/* ------------------------------------------------------------------ */
+// The stream carries no hardware inventories (see state.ts): the dialog asks
+// for the one host it shows, and a row starts the request on pointer-down so
+// the inventory is usually here by the time the click opens the dialog.
+const hwLoading = new Set<string>();
+const hwFailedAt = new Map<string, number>();
+// The collection each request was made for. A fetch can return a newer
+// collection than the last frame announced; it is not refetched just because
+// the two differ until the frame catches up.
+const hwRequestedFor = new Map<string, string>();
+
+function hardwareStatus(id: string): 'loading' | 'failed' | 'idle' {
+  if (hwLoading.has(id)) return 'loading';
+  return hwFailedAt.has(id) ? 'failed' : 'idle';
+}
+
+function loadHardware(id: string): void {
+  const s = state.byId.get(id);
+  if (!s || !s.hasHw || (s.hardware && !s.hwStale) || hwLoading.has(id)) return;
+  const failedAt = hwFailedAt.get(id);
+  if (failedAt ? Date.now() - failedAt < 10_000 : hwRequestedFor.get(id) === s.hwAt) return;
+  hwLoading.add(id);
+  hwRequestedFor.set(id, s.hwAt);
+  getJSON<any[]>(`/api/metrics?id=${encodeURIComponent(id)}`)
+    .then((list) => {
+      const raw = Array.isArray(list) ? list.find((x) => x && x.id === id) : null;
+      if (raw?.hardware) rememberHardware(id, raw.hardware);
+      hwFailedAt.delete(id);
+    })
+    .catch(() => hwFailedAt.set(id, Date.now()))
+    .finally(() => {
+      hwLoading.delete(id);
+      refreshHost(id);
+    });
+}
+
+/** Rebuild one host's view model (its hardware arrived) and update the open dialog. */
+function refreshHost(id: string): void {
+  const cur = state.byId.get(id);
+  if (!cur) return;
+  const s = normalize(cur.raw);
+  state.byId.set(id, s);
+  state.all = state.all.map((x) => (x.id === id ? s : x));
+  state.view = state.view.map((x) => (x.id === id ? s : x));
+  if (detail.openId === id) detail.update(s);
+}
+
 function setLive(stateName: string): void {
   const el = document.getElementById('live-indicator');
   const txt = document.getElementById('live-text');
@@ -441,6 +490,10 @@ function setupControls(): void {
     const row = target.closest<HTMLElement>('.srv-row');
     if (row && row.dataset.id) detail.open(row.dataset.id);
   });
+  body.addEventListener('pointerdown', (e) => {
+    const row = (e.target as HTMLElement).closest<HTMLElement>('.srv-row');
+    if (row && row.dataset.id) loadHardware(row.dataset.id);
+  });
   body.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     const row = (e.target as HTMLElement).closest<HTMLElement>('.srv-row');
@@ -476,6 +529,8 @@ async function boot(): Promise<void> {
     },
     showTraffic: () => state.showTraffic,
     showTags: () => state.showTags,
+    loadHardware,
+    hardwareStatus,
   });
   pendingHashId = idFromHash();
 
@@ -505,10 +560,9 @@ async function boot(): Promise<void> {
     if (openId) detail.update(state.byId.get(openId) || null);
     setLive(document.getElementById('live-indicator')?.getAttribute('data-state') || 'live');
   });
+  // A hidden tab pauses the stream and a visible one resumes it (SSEClient);
+  // the snapshot sent on reconnect brings the page up to date.
   window.addEventListener('beforeunload', () => sse?.close());
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && state.rendered) loadOnce();
-  });
   document.documentElement.setAttribute('data-lang', getLang());
 }
 
