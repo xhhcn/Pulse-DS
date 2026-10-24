@@ -54,8 +54,10 @@ export function locationHtml(s: Server, withText = false): string {
   if (!s.location) return `<span class="t-3 text-[12px]">—</span>`;
   const f = flagIcon(s.location);
   const flag = f ? remoteIconHtml(f, 'flag-icon', s.location, withText ? '' : 'text') : '';
-  const text = withText || !f ? `<span class="text-[12px] t-2">${esc(s.location)}</span>` : '';
-  return `<span class="inline-flex items-center gap-1.5" title="${attr(s.location)}">${flag}${text}</span>`;
+  // A name with no flag is shown as text, cut to the cell (the table column is
+  // 56px wide) with the whole name on hover.
+  const text = withText || !f ? `<span class="text-[12px] t-2 truncate">${esc(s.location)}</span>` : '';
+  return `<span class="inline-flex items-center gap-1.5 min-w-0 max-w-full" title="${attr(s.location)}">${flag}${text}</span>`;
 }
 
 export function osHtml(s: Server, withText = false): string {
@@ -80,7 +82,12 @@ function metaHtml(s: Server): string {
   // system that never connected does not show a row of dashes.
   const zh = getLang() === 'zh';
   const when = !s.reported ? '' : s.online ? uptimeLong(s.uptime, zh) : uptimeState(s, zh).text;
-  const parts = [s.os || s.osIcon ? osHtml(s, true) : '', s.location ? locationHtml(s, true) : '', when ? `<span>${esc(when)}</span>` : ''];
+  // One line on every card: a long OS name gives way first (see .meta-os).
+  const parts = [
+    s.os || s.osIcon ? `<span class="meta-os">${osHtml(s, true)}</span>` : '',
+    s.location ? `<span class="meta-loc">${locationHtml(s, true)}</span>` : '',
+    when ? `<span>${esc(when)}</span>` : '',
+  ];
   return parts.filter(Boolean).join('');
 }
 

@@ -185,7 +185,8 @@ export function fetchSvg(name: string): Promise<string | null> {
       }
       // Normalise: let CSS size the glyph. The CDN response is third-party
       // markup, so it is reduced to inert drawing before it can touch the DOM.
-      text = text.replace(/\swidth="[^"]*"/, '').replace(/\sheight="[^"]*"/, '');
+      // Only the root's size: a shape's own width/height must stay.
+      text = text.replace(/<svg\b[^>]*>/, (root) => root.replace(/\s(?:width|height)="[^"]*"/g, ''));
       const clean = sanitizeSvg(text);
       svgCache.set(name, clean);
       if (clean) persistIcon(name, clean);
@@ -231,7 +232,7 @@ function applyFallback(el: HTMLElement, name: string): void {
   const fb = el.getAttribute('data-fallback');
   if (fb === 'text') {
     // Replace the icon box with its title text (e.g. an unknown country code).
-    el.className = 'text-[12px] t-2';
+    el.className = 'text-[12px] t-2 truncate';
     el.textContent = el.getAttribute('title') || '';
     el.hidden = false;
     return;
@@ -254,7 +255,7 @@ export function remoteIconHtml(name: string, cls: string, title = '', fallback =
   const t = title ? ` title="${title.replace(/"/g, '&quot;')}"` : '';
   const fb = fallback ? ` data-fallback="${fallback.replace(/"/g, '')}"` : '';
   if (cached === null) {
-    if (fallback === 'text') return `<span class="text-[12px] t-2"${t}>${title.replace(/</g, '&lt;')}</span>`;
+    if (fallback === 'text') return `<span class="text-[12px] t-2 truncate"${t}>${title.replace(/</g, '&lt;')}</span>`;
     // No fallback: render nothing. An empty box here (a flag next to its
     // country code, say) left a gap whenever the icon CDN was unreachable.
     return fallback ? `<span class="${cls}"${t}>${icon(fallback, 18, 't-3')}</span>` : '';
@@ -317,7 +318,8 @@ const CODE_TO_NAME: Record<string, string> = {
   AD: 'andorra', AE: 'united-arab-emirates', AF: 'afghanistan', AG: 'antigua-and-barbuda', AI: 'anguilla', AL: 'albania', AM: 'armenia', AO: 'angola', AQ: 'antarctica', AR: 'argentina', AS: 'american-samoa', AT: 'austria', AU: 'australia', AW: 'aruba', AX: 'aland-islands', AZ: 'azerbaijan', BA: 'bosnia-and-herzegovina', BB: 'barbados', BD: 'bangladesh', BE: 'belgium', BF: 'burkina-faso', BG: 'bulgaria', BH: 'bahrain', BI: 'burundi', BJ: 'benin', BL: 'saint-barthelemy', BM: 'bermuda', BN: 'brunei', BO: 'bolivia', BQ: 'caribbean-netherlands', BR: 'brazil', BS: 'bahamas', BT: 'bhutan', BV: 'bouvet-island', BW: 'botswana', BY: 'belarus', BZ: 'belize', CA: 'canada', CC: 'cocos-islands', CD: 'congo-kinshasa', CF: 'central-african-republic', CG: 'congo-brazzaville', CH: 'switzerland', CI: 'cote-divoire', CK: 'cook-islands', CL: 'chile', CM: 'cameroon', CN: 'china', CO: 'colombia', CR: 'costa-rica', CU: 'cuba', CV: 'cape-verde', CW: 'curacao', CX: 'christmas-island', CY: 'cyprus', CZ: 'czech-republic', DE: 'germany', DJ: 'djibouti', DK: 'denmark', DM: 'dominica', DO: 'dominican-republic', DZ: 'algeria', EC: 'ecuador', EE: 'estonia', EG: 'egypt', EH: 'western-sahara', ER: 'eritrea', ES: 'spain', ET: 'ethiopia', FI: 'finland', FJ: 'fiji', FK: 'falkland-islands', FM: 'micronesia', FO: 'faroe-islands', FR: 'france', GA: 'gabon', GB: 'united-kingdom', GD: 'grenada', GE: 'georgia', GF: 'french-guiana', GG: 'guernsey', GH: 'ghana', GI: 'gibraltar', GL: 'greenland', GM: 'gambia', GN: 'guinea', GP: 'guadeloupe', GQ: 'equatorial-guinea', GR: 'greece', GS: 'south-georgia', GT: 'guatemala', GU: 'guam', GW: 'guinea-bissau', GY: 'guyana', HK: 'hong-kong-sar-china', HM: 'heard-island', HN: 'honduras', HR: 'croatia', HT: 'haiti', HU: 'hungary', ID: 'indonesia', IE: 'ireland', IL: 'israel', IM: 'isle-of-man', IN: 'india', IO: 'british-indian-ocean-territory', IQ: 'iraq', IR: 'iran', IS: 'iceland', IT: 'italy', JE: 'jersey', JM: 'jamaica', JO: 'jordan', JP: 'japan', KE: 'kenya', KG: 'kyrgyzstan', KH: 'cambodia', KI: 'kiribati', KM: 'comoros', KN: 'saint-kitts-and-nevis', KP: 'north-korea', KR: 'south-korea', KW: 'kuwait', KY: 'cayman-islands', KZ: 'kazakhstan', LA: 'laos', LB: 'lebanon', LC: 'saint-lucia', LI: 'liechtenstein', LK: 'sri-lanka', LR: 'liberia', LS: 'lesotho', LT: 'lithuania', LU: 'luxembourg', LV: 'latvia', LY: 'libya', MA: 'morocco', MC: 'monaco', MD: 'moldova', ME: 'montenegro', MF: 'saint-martin', MG: 'madagascar', MH: 'marshall-islands', MK: 'north-macedonia', ML: 'mali', MM: 'myanmar', MN: 'mongolia', MO: 'macau-sar-china', MP: 'northern-mariana-islands', MQ: 'martinique', MR: 'mauritania', MS: 'montserrat', MT: 'malta', MU: 'mauritius', MV: 'maldives', MW: 'malawi', MX: 'mexico', MY: 'malaysia', MZ: 'mozambique', NA: 'namibia', NC: 'new-caledonia', NE: 'niger', NF: 'norfolk-island', NG: 'nigeria', NI: 'nicaragua', NL: 'netherlands', NO: 'norway', NP: 'nepal', NR: 'nauru', NU: 'niue', NZ: 'new-zealand', OM: 'oman', PA: 'panama', PE: 'peru', PF: 'french-polynesia', PG: 'papua-new-guinea', PH: 'philippines', PK: 'pakistan', PL: 'poland', PM: 'saint-pierre-and-miquelon', PN: 'pitcairn', PR: 'puerto-rico', PS: 'palestine', PT: 'portugal', PW: 'palau', PY: 'paraguay', QA: 'qatar', RE: 'reunion', RO: 'romania', RS: 'serbia', RU: 'russia', RW: 'rwanda', SA: 'saudi-arabia', SB: 'solomon-islands', SC: 'seychelles', SD: 'sudan', SE: 'sweden', SG: 'singapore', SH: 'saint-helena', SI: 'slovenia', SJ: 'svalbard-and-jan-mayen', SK: 'slovakia', SL: 'sierra-leone', SM: 'san-marino', SN: 'senegal', SO: 'somalia', SR: 'suriname', SS: 'south-sudan', ST: 'sao-tome-and-principe', SV: 'el-salvador', SX: 'sint-maarten', SY: 'syria', SZ: 'eswatini', TC: 'turks-and-caicos', TD: 'chad', TF: 'french-southern-territories', TG: 'togo', TH: 'thailand', TJ: 'tajikistan', TK: 'tokelau', TL: 'timor-leste', TM: 'turkmenistan', TN: 'tunisia', TO: 'tonga', TR: 'turkey', TT: 'trinidad-and-tobago', TV: 'tuvalu', TW: 'taiwan', TZ: 'tanzania', UA: 'ukraine', UG: 'uganda', UM: 'us-outlying-islands', US: 'united-states', UY: 'uruguay', UZ: 'uzbekistan', VA: 'vatican-city', VC: 'saint-vincent-and-the-grenadines', VE: 'venezuela', VG: 'british-virgin-islands', VI: 'us-virgin-islands', VN: 'vietnam', VU: 'vanuatu', WF: 'wallis-and-futuna', WS: 'samoa', XK: 'kosovo', YE: 'yemen', YT: 'mayotte', ZA: 'south-africa', ZM: 'zambia', ZW: 'zimbabwe',
 };
 const SPECIAL: Record<string, string> = {
-  'hong kong': 'hong-kong-sar-china', hongkong: 'hong-kong-sar-china', macau: 'macau-sar-china', macao: 'macau-sar-china',
+  'hong kong': 'hong-kong-sar-china', hongkong: 'hong-kong-sar-china', 'hong kong sar': 'hong-kong-sar-china',
+  macau: 'macau-sar-china', macao: 'macau-sar-china', 'macau sar': 'macau-sar-china', 'macao sar': 'macau-sar-china',
   usa: 'united-states', us: 'united-states', 'united states': 'united-states', uk: 'united-kingdom', 'united kingdom': 'united-kingdom',
   uae: 'united-arab-emirates', korea: 'south-korea', 'south korea': 'south-korea', 'north korea': 'north-korea',
   'czech republic': 'czech-republic', 'russian federation': 'russia', burma: 'myanmar', bosnia: 'bosnia-and-herzegovina',

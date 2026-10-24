@@ -195,8 +195,8 @@ export class TCPingPanel {
     const targets = cfg.targets
       .map(
         (tg, i) =>
-          `<button type="button" class="tp-target" data-target="${attr(tg.address)}" aria-pressed="false" title="${attr(tg.address)}">
-            <span class="tp-name"><span class="dot" style="background:${PALETTE[i % PALETTE.length]}"></span><span class="truncate">${esc(tg.name || tg.address)}</span></span>
+          `<button type="button" class="tp-target" data-target="${attr(tg.address)}" aria-pressed="false" title="${attr(tg.name && tg.name !== tg.address ? `${tg.name} · ${tg.address}` : tg.address)}">
+            <span class="tp-name"><span class="dot" style="background:${PALETTE[i % PALETTE.length]}"></span><span class="truncate min-w-0">${esc(tg.name || tg.address)}</span></span>
             <span class="tp-stats"><span>${esc(t('tcping.latest'))} <b data-tp-latest>—</b></span><span>${esc(t('tcping.avg'))} <b data-tp-avg>—</b></span><span>${esc(t('tcping.loss'))} <b data-tp-loss>—</b></span></span>
           </button>`,
       )

@@ -42,9 +42,9 @@ export function renderTag(tag: string, s: Server): string {
   if (tag.length > 4 && tag[3] === ':' && /^sp[ryb]$/i.test(tag.slice(0, 3)) && tag.slice(4).trim()) {
     const g = GRADIENTS[tag[2].toLowerCase()];
     const label = tag.slice(4).trim();
-    return `<span class="tag tag-gradient" style="background-image:${g}" title="${esc(label)}">${esc(label)}</span>`;
+    return `<span class="tag tag-gradient" style="background-image:${g}" title="${esc(label)}"><span class="tag-text">${esc(label)}</span></span>`;
   }
-  return `<span class="tag" title="${esc(tag)}">${esc(tag)}</span>`;
+  return `<span class="tag" title="${esc(tag)}"><span class="tag-text">${esc(tag)}</span></span>`;
 }
 
 export function renderTags(s: Server): string {

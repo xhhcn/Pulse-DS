@@ -132,7 +132,7 @@ const maxPendingTCPingResults = 500
 
 // agentVersion is the release this agent was built for. The dashboard shows
 // it on the hardware tab, so it is bumped together with every release tag.
-const agentVersion = "1.0.6"
+const agentVersion = "1.0.7"
 
 var (
 
@@ -1820,31 +1820,37 @@ func getPublicIPv6() string {
 func getLocation() string {
 	// Location never changes at runtime, compute once and cache forever
 	locationOnce.Do(func() {
-		// Get location (country only)
-		location := envOr("LOCATION", "")
-		if location != "" {
-			// Extract only country part
-			parts := strings.Split(location, ",")
-			if len(parts) > 0 {
-				country := strings.TrimSpace(parts[len(parts)-1])
-				// Remove any extra details, keep only country name
-				countryParts := strings.Fields(country)
-				if len(countryParts) > 0 {
-					locationCache = countryParts[0]
-					return
-				}
-				locationCache = country
-				return
-			}
-			locationCache = strings.TrimSpace(location)
-			return
-		}
-
-		// Try to detect from system timezone or IP (simplified)
-		// In production, use proper geolocation service
-		locationCache = ""
+		// Country only, and empty unless LOCATION is set: the server then
+		// looks the country up from the public IP.
+		locationCache = extractCountry(envOr("LOCATION", ""))
 	})
 	return locationCache
+}
+
+// extractCountry reduces LOCATION to the country the dashboard turns into a
+// flag: the last comma-separated part, without a note in parentheses or a
+// postal code ("Tokyo, Japan 100-0001" → "Japan", "Frankfurt, DE (Hetzner)"
+// → "DE"). Names of several words stay whole ("Hong Kong", "United States")
+// and a two-letter code is upper-cased ("de" → "DE"). The server applies
+// the same rule.
+func extractCountry(location string) string {
+	country := ""
+	parts := strings.Split(location, ",")
+	for i := len(parts) - 1; i >= 0 && country == ""; i-- {
+		country = strings.TrimSpace(parts[i])
+	}
+	if i := strings.IndexByte(country, '('); i >= 0 {
+		country = country[:i]
+	}
+	fields := strings.Fields(country)
+	for len(fields) > 1 && strings.ContainsAny(fields[len(fields)-1], "0123456789") {
+		fields = fields[:len(fields)-1]
+	}
+	country = strings.Join(fields, " ")
+	if len(country) == 2 && strings.Trim(strings.ToUpper(country), "ABCDEFGHIJKLMNOPQRSTUVWXYZ") == "" {
+		country = strings.ToUpper(country)
+	}
+	return country
 }
 
 // CPU stats tracking for accurate calculation

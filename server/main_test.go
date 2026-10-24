@@ -171,3 +171,27 @@ func TestTCPingCacheSkipsOversizedResponseWithoutPartialEntry(t *testing.T) {
 		t.Fatalf("tcpingCacheBytes = %d, want 0", tcpingCacheBytes)
 	}
 }
+
+func TestExtractCountryKeepsWholeNames(t *testing.T) {
+	cases := map[string]string{
+		"":                               "",
+		"US":                             "US",
+		"de":                             "DE",
+		"Hong Kong":                      "Hong Kong",
+		"United States":                  "United States",
+		"Los Angeles, CA, United States": "United States",
+		"Frankfurt, DE":                  "DE",
+		"Frankfurt, DE (Hetzner)":        "DE",
+		"Tokyo, Japan 100-0001":          "Japan",
+		"Seoul,  South   Korea ":         "South Korea",
+		"Germany,":                       "Germany",
+		"香港":                             "香港",
+		"(somewhere)":                    "",
+		"12345":                          "12345",
+	}
+	for in, want := range cases {
+		if got := extractCountry(in); got != want {
+			t.Errorf("extractCountry(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

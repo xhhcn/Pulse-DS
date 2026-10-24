@@ -440,10 +440,19 @@ html.kb :focus-visible {
   white-space: nowrap;
   background: var(--surface-2);
   color: var(--text-2);
-  max-width: 200px;
+  /* Never wider than its row: a long tag truncates on a phone instead of
+     poking out of the admin card. */
+  max-width: min(200px, 100%);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+/* The ellipsis needs a block of its own: text-overflow does nothing on the
+   flex box itself, where a long tag was cut off mid-letter at the edge. */
+.tag-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-shrink: 0;
+  line-height: normal;
 }
 .tag svg {
   opacity: 0.7;
@@ -536,11 +545,14 @@ html.kb :focus-visible {
   gap: 8px;
 }
 /* A button centres its content vertically; when one card wraps (a timeout
-   reads "timeout / failed") its neighbours stretch, so pin content to the top. */
+   reads "timeout / failed") its neighbours stretch, so pin content to the top.
+   Browsers also start-align a button's items, which lets a long name run
+   past the card: stretch them so the name truncates at the card's edge. */
 .tp-target {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
+  align-items: stretch;
   text-align: left;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -1046,14 +1058,27 @@ html.kb .copy-btn:focus-visible {
     grid-area: health;
     justify-self: end;
   }
+  /* A single line, so every card has the same rhythm: the OS name truncates
+     first, a long location name stops at 40%, the uptime never shrinks. */
   .srv-row > .c-meta {
     grid-area: meta;
     display: flex;
     align-items: center;
     gap: 10px;
-    flex-wrap: wrap;
+    white-space: nowrap;
     font-size: 12px;
     color: var(--text-2);
+  }
+  .srv-row > .c-meta > * {
+    display: flex;
+    min-width: 0;
+    flex-shrink: 0;
+  }
+  .srv-row > .c-meta > .meta-os {
+    flex-shrink: 1;
+  }
+  .srv-row > .c-meta > .meta-loc {
+    max-width: 40%;
   }
   .srv-row > .c-cpu { grid-area: cpu; }
   .srv-row > .c-mem { grid-area: mem; }

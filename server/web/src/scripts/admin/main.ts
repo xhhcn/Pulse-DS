@@ -128,7 +128,7 @@ function renderRowHtml(s: any): string {
   if (s.hide_on_home === true) badges.push(`<span class="pill pill-sm pill-neutral" title="${attr(t('admin.hiddenHome'))}">${icon('eye-off', 11)}<span>${esc(t('admin.hiddenHome'))}</span></span>`);
   if (s.hide_tcping === true) badges.push(`<span class="pill pill-sm pill-neutral" title="${attr(t('admin.tcpingOff'))}">${icon('radio', 11)}<span>${esc(t('admin.tcpingOff'))}</span></span>`);
   if (!hasAgent) badges.push(`<span class="pill pill-sm pill-warn">${esc(t('admin.noAgent'))}</span>`);
-  const tags = Array.isArray(s.tags) && s.tags.length ? `<div class="flex flex-wrap gap-1 mt-1.5">${s.tags.map((x: string) => `<span class="tag">${esc(x)}</span>`).join('')}</div>` : '';
+  const tags = Array.isArray(s.tags) && s.tags.length ? `<div class="flex flex-wrap gap-1 mt-1.5">${s.tags.map((x: string) => `<span class="tag" title="${attr(x)}"><span class="tag-text">${esc(x)}</span></span>`).join('')}</div>` : '';
   const topo = cpuTopology(s.cpu_model || '');
   const subParts = [
     s.os || '',

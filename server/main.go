@@ -3693,24 +3693,29 @@ func getCountryFromIP(ip string) string {
 }
 
 // Extract country from location string
+// extractCountry reduces a location to the country the frontend turns into a
+// flag: the last comma-separated part, without a note in parentheses or a
+// postal code ("Tokyo, Japan 100-0001" → "Japan", "Frankfurt, DE (Hetzner)"
+// → "DE"). Names of several words stay whole ("Hong Kong", "United States")
+// and a two-letter code is upper-cased ("de" → "DE").
 func extractCountry(location string) string {
-	if location == "" {
-		return ""
-	}
-
-	// If location contains comma, take the last part (usually country)
+	country := ""
 	parts := strings.Split(location, ",")
-	if len(parts) > 0 {
-		country := strings.TrimSpace(parts[len(parts)-1])
-		// Remove any extra details after country
-		countryParts := strings.Fields(country)
-		if len(countryParts) > 0 {
-			return countryParts[0]
-		}
-		return country
+	for i := len(parts) - 1; i >= 0 && country == ""; i-- {
+		country = strings.TrimSpace(parts[i])
 	}
-
-	return strings.TrimSpace(location)
+	if i := strings.IndexByte(country, '('); i >= 0 {
+		country = country[:i]
+	}
+	fields := strings.Fields(country)
+	for len(fields) > 1 && strings.ContainsAny(fields[len(fields)-1], "0123456789") {
+		fields = fields[:len(fields)-1]
+	}
+	country = strings.Join(fields, " ")
+	if len(country) == 2 && strings.Trim(strings.ToUpper(country), "ABCDEFGHIJKLMNOPQRSTUVWXYZ") == "" {
+		country = strings.ToUpper(country)
+	}
+	return country
 }
 
 // generateSecret generates a short secret for client authentication
