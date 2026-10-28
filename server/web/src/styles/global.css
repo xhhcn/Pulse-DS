@@ -538,6 +538,12 @@ html.kb :focus-visible {
   display: none;
 }
 
+/* One target of the overview's latency line wraps as a unit. */
+.lat-part {
+  display: inline-block;
+  max-width: 100%;
+}
+
 /* TCPing targets in the settings: name · address · ✕ on one line. On a phone
    the name keeps its ✕ beside it and the address goes underneath, and a
    hairline separates targets, so every ✕ visibly belongs to its own pair. */

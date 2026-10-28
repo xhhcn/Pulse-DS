@@ -10,7 +10,7 @@ import { Modal } from '../core/modal';
 import { fillClass, healthPill, locationHtml, osHtml } from './row';
 import { renderTags, patchLiveTags } from './tags';
 import { cpuSummary, diskSummary, memorySummary, nicSummary, renderHardware, renderIssues, syncScrollHints, systemRows, updateScrollHint } from './hardware';
-import { TCPingPanel, latestLatencyText, tcpingConfigured } from './tcping';
+import { TCPingPanel, latestLatencyHtml, tcpingConfigured } from './tcping';
 import type { Server } from './state';
 
 type Tab = 'overview' | 'hardware' | 'tcping';
@@ -23,6 +23,8 @@ export interface DetailHost {
   /** Fetch the host's hardware inventory if it is missing or stale. */
   loadHardware(id: string): void;
   hardwareStatus(id: string): 'loading' | 'failed' | 'idle';
+  /** Resolves when the host's inventory is here (or cannot come within `ms`). */
+  hardwareReady(id: string, ms: number): Promise<void>;
 }
 
 export function idFromHash(): string | null {
@@ -51,6 +53,8 @@ export class DetailDialog {
   private tab: Tab = 'overview';
   private hwSig = '';
   private hwRenderedFor = '';
+  /** Bumped by every open(), so only the latest of overlapping opens shows. */
+  private openSeq = 0;
   private tcpSig = '';
   private tcping: TCPingPanel;
   private tcpingMounted = false;
@@ -136,13 +140,31 @@ export class DetailDialog {
     return this.modal.isOpen ? this.id : null;
   }
 
-  open(id: string, pushHash = true): boolean {
+  open(id: string, pushHash = true, waitMs = 600): boolean {
+    const s = this.host.get(id);
+    if (!s) return false;
+    const seq = ++this.openSeq;
+    if (s.hasHw && !s.hardware) {
+      // The inventory is not here yet (the page has only just loaded, or the
+      // host has only now started reporting one): give it a moment, so the
+      // dialog opens complete instead of growing rows when it lands.
+      this.host.loadHardware(id);
+      this.host.hardwareReady(id, waitMs).then(() => {
+        if (seq === this.openSeq) this.show(id, pushHash);
+      });
+      return true;
+    }
+    this.show(id, pushHash);
+    return true;
+  }
+
+  private show(id: string, pushHash: boolean): void {
+    const s = this.host.get(id);
+    if (!s) return;
     if (id !== this.id) {
       this.issuesOpen = false;
       this.sensorOpen.clear();
     }
-    const s = this.host.get(id);
-    if (!s) return false;
     const switching = this.modal.isOpen && this.id !== id;
     this.id = id;
     this.current = s;
@@ -170,7 +192,6 @@ export class DetailDialog {
       this.hashOwned = true;
     }
     this.syncNav(id);
-    return true;
   }
 
   close(): void {
@@ -356,8 +377,8 @@ export class DetailDialog {
     const rows: Array<[string, string]> = [];
     rows.push([t('detail.download'), `<span class="tnum">${esc(speedMiB(s.netIn))}</span>`]);
     rows.push([t('detail.upload'), `<span class="tnum">${esc(speedMiB(s.netOut))}</span>`]);
-    const lat = latestLatencyText(s);
-    if (lat) rows.push([t('detail.latency'), esc(lat)]);
+    const lat = latestLatencyHtml(s);
+    if (lat) rows.push([t('detail.latency'), lat]);
     const nics = nicSummary(s);
     if (nics) rows.push([t('detail.interfaces'), esc(nics)]);
     if (this.host.showTraffic()) rows.push([t('detail.traffic'), `↓ ${esc(bytes(s.totalIn))} <span class="t-3">·</span> ↑ ${esc(bytes(s.totalOut))}`]);

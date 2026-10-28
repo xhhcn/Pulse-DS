@@ -196,14 +196,17 @@ export function systemRows(s: Server): Array<[string, string]> {
     if (sy.serial) rows.push([t('detail.serial'), `<span class="mono">${esc(sy.serial)}</span>`]);
     if (sy.board && sy.board !== sy.product) rows.push([t('detail.board'), esc(sy.board)]);
   }
-  if (!hw?.cpu && s.cpuModel) {
-    // No hardware snapshot (an upstream Pulse agent): show the cleaned model
-    // plus the topology the agent appended, instead of the raw string.
+  // Rows for an agent without a hardware snapshot (a VPS, an upstream Pulse
+  // agent). A host whose inventory is still loading gets the hardware layout
+  // from the start, so its card does not swap rows when the inventory lands.
+  if ((hw ? !hw.cpu : !s.hasHw) && s.cpuModel) {
+    // Show the cleaned model plus the topology the agent appended, instead of
+    // the raw string.
     const topo = cpuTopology(s.cpuModel);
     const parts = [cleanCpuModel(s.cpuModel, false), topo.cores ? t('detail.cores', { n: topo.cores }) : '', topo.threads ? t('detail.threads', { n: topo.threads }) : ''].filter(Boolean);
     rows.push([t('detail.cpu'), esc(parts.join(' · '))]);
   }
-  if (!hw) {
+  if (!s.hasHw) {
     const k = kernelRow(s);
     if (k) rows.push(k);
     // The add dialog stores a placeholder version; it is only real once the

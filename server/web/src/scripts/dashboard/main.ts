@@ -272,12 +272,15 @@ function ingest(list: any[]): void {
   state.byId = new Map(items.map((s) => [s.id, s]));
   state.rendered = true;
   paint();
+  prefetchHardware();
   const openId = detail.openId;
   if (openId) detail.update(state.byId.get(openId) || null);
   if (pendingHashId) {
     const id = pendingHashId;
     pendingHashId = null;
-    if (state.byId.has(id)) detail.open(id, false);
+    // A shared #server/… link opens while the page is still loading: nobody is
+    // waiting on a click, so the dialog can wait longer for its inventory.
+    if (state.byId.has(id)) detail.open(id, false, 2000);
   }
 }
 
@@ -299,39 +302,88 @@ async function loadOnce(): Promise<void> {
 /* ------------------------------------------------------------------ */
 /* Hardware on demand                                                   */
 /* ------------------------------------------------------------------ */
-// The stream carries no hardware inventories (see state.ts): the dialog asks
-// for the one host it shows, and a row starts the request on pointer-down so
-// the inventory is usually here by the time the click opens the dialog.
-const hwLoading = new Set<string>();
+// The stream carries no hardware inventories (see state.ts). Every inventory
+// is fetched once, right after the first snapshot, so a dialog opens complete;
+// after that only the open dialog's host is refreshed when the agent announces
+// a new collection. A row also requests its host on pointer-down, in case the
+// host only started reporting hardware after the page loaded.
+const hwLoading = new Map<string, Promise<void>>();
 const hwFailedAt = new Map<string, number>();
 // The collection each request was made for. A fetch can return a newer
 // collection than the last frame announced; it is not refetched just because
 // the two differ until the frame catches up.
 const hwRequestedFor = new Map<string, string>();
+let hwPrefetch: Promise<void> | null = null;
+let hwPrefetching = false;
+
+function prefetchHardware(): void {
+  if (hwPrefetch) return;
+  hwPrefetching = true;
+  hwPrefetch = getJSON<any[]>('/api/metrics?view=hardware')
+    .then((list) => {
+      if (!Array.isArray(list)) return;
+      for (const x of list) if (x && x.id) rememberHardware(String(x.id), x.hardware);
+    })
+    .catch(() => {})
+    .finally(() => {
+      hwPrefetching = false;
+      if (state.rendered) refreshAll();
+    });
+}
 
 function hardwareStatus(id: string): 'loading' | 'failed' | 'idle' {
-  if (hwLoading.has(id)) return 'loading';
+  if (hwLoading.has(id) || hwPrefetching) return 'loading';
   return hwFailedAt.has(id) ? 'failed' : 'idle';
 }
 
 function loadHardware(id: string): void {
   const s = state.byId.get(id);
-  if (!s || !s.hasHw || (s.hardware && !s.hwStale) || hwLoading.has(id)) return;
+  // While the prefetch is out it brings every inventory; ask again after.
+  if (!s || !s.hasHw || (s.hardware && !s.hwStale) || hwLoading.has(id) || hwPrefetching) return;
   const failedAt = hwFailedAt.get(id);
   if (failedAt ? Date.now() - failedAt < 10_000 : hwRequestedFor.get(id) === s.hwAt) return;
-  hwLoading.add(id);
   hwRequestedFor.set(id, s.hwAt);
-  getJSON<any[]>(`/api/metrics?id=${encodeURIComponent(id)}`)
+  const p = getJSON<any[]>(`/api/metrics?id=${encodeURIComponent(id)}`)
     .then((list) => {
       const raw = Array.isArray(list) ? list.find((x) => x && x.id === id) : null;
       if (raw?.hardware) rememberHardware(id, raw.hardware);
       hwFailedAt.delete(id);
     })
-    .catch(() => hwFailedAt.set(id, Date.now()))
+    .catch(() => {
+      hwFailedAt.set(id, Date.now());
+    })
     .finally(() => {
       hwLoading.delete(id);
       refreshHost(id);
     });
+  hwLoading.set(id, p);
+}
+
+/**
+ * Resolves once the host's inventory is here, every request that could bring
+ * it has settled, or `ms` has passed — whichever comes first.
+ */
+function hardwareReady(id: string, ms: number): Promise<void> {
+  const pending = [hwPrefetch, hwLoading.get(id)].filter((p): p is Promise<void> => !!p);
+  if (!pending.length || state.byId.get(id)?.hardware) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(resolve, ms);
+    const done = () => {
+      window.clearTimeout(timer);
+      resolve();
+    };
+    pending.forEach((p) => p.then(() => state.byId.get(id)?.hardware && done()));
+    Promise.allSettled(pending).then(done);
+  });
+}
+
+/** Rebuild every view model (the inventories arrived) and update the open dialog. */
+function refreshAll(): void {
+  state.all = state.all.map((x) => normalize(x.raw));
+  state.byId = new Map(state.all.map((x) => [x.id, x]));
+  paint();
+  const openId = detail.openId;
+  if (openId) detail.update(state.byId.get(openId) || null);
 }
 
 /** Rebuild one host's view model (its hardware arrived) and update the open dialog. */
@@ -531,6 +583,7 @@ async function boot(): Promise<void> {
     showTags: () => state.showTags,
     loadHardware,
     hardwareStatus,
+    hardwareReady,
   });
   pendingHashId = idFromHash();
 
@@ -550,6 +603,8 @@ async function boot(): Promise<void> {
   setupControls();
   getTCPingConfig();
   startStream();
+  // In parallel with the stream's first snapshot, not after it.
+  prefetchHardware();
 
   window.addEventListener('pulse:lang', () => {
     // Issue text is language-dependent: rebuild the view models from raw.

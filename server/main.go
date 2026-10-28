@@ -1879,6 +1879,25 @@ func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
 		metrics = one
 	}
 
+	// ?view=hardware answers with the hardware inventories only ({id,
+	// hardware} for each system that has one): the dashboard fetches them
+	// once after it loads, so a dialog opens complete. Same checks and
+	// masking as the list; no addresses, no secrets.
+	if r.URL.Query().Get("view") == "hardware" {
+		type inventory struct {
+			ID       string        `json:"id"`
+			Hardware *HardwareInfo `json:"hardware"`
+		}
+		inventories := make([]inventory, 0, len(metrics))
+		for _, m := range metrics {
+			if m.Hardware != nil {
+				inventories = append(inventories, inventory{ID: m.ID, Hardware: m.Hardware})
+			}
+		}
+		writeJSON(w, http.StatusOK, inventories)
+		return
+	}
+
 	writeJSON(w, http.StatusOK, metrics)
 }
 

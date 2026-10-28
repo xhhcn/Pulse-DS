@@ -69,7 +69,12 @@ function targetName(address: string): string {
 }
 
 /** "Cloudflare 1.6 ms · GitHub 17 ms" from the server's latest samples. */
-export function latestLatencyText(s: Server): string {
+/**
+ * The latest latency per target as HTML for the overview's network card. Each
+ * target ("GitHub 62 ms") wraps as one unit, so a line breaks between targets;
+ * only a name longer than the whole line wraps inside itself.
+ */
+export function latestLatencyHtml(s: Server): string {
   const d = s.raw?.tcping_data;
   if (!d || typeof d !== 'object') return '';
   const order = config?.targets.map((x) => x.address) || Object.keys(d);
@@ -79,7 +84,7 @@ export function latestLatencyText(s: Server): string {
     if (!v) continue;
     const lat = Number(v.latency);
     const ok = Number.isFinite(lat) && lat > 0 && lat <= LOSS_MS;
-    parts.push(`${targetName(addr)} ${ok ? lat.toFixed(lat < 10 ? 1 : 0) + ' ms' : t('tcping.timeout')}`);
+    parts.push(`<span class="lat-part">${esc(targetName(addr))}\u00a0${ok ? lat.toFixed(lat < 10 ? 1 : 0) + '\u00a0ms' : esc(t('tcping.timeout'))}</span>`);
   }
   return parts.join(' · ');
 }

@@ -132,7 +132,7 @@ const maxPendingTCPingResults = 500
 
 // agentVersion is the release this agent was built for. The dashboard shows
 // it on the hardware tab, so it is bumped together with every release tag.
-const agentVersion = "1.0.8"
+const agentVersion = "1.0.9"
 
 var (
 

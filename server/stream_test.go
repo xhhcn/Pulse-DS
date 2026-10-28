@@ -290,3 +290,51 @@ func TestSSEGzipStreamIsValidGzipWhenClosed(t *testing.T) {
 		t.Fatal("closing a stream that never wrote must be a no-op")
 	}
 }
+
+func TestListMetricsHardwareViewKeepsListRules(t *testing.T) {
+	store := seedStreamStore(t)
+	authTokensMu.Lock()
+	authTokens["test-admin-token"] = time.Now().Add(time.Hour)
+	authTokensMu.Unlock()
+	t.Cleanup(func() {
+		authTokensMu.Lock()
+		delete(authTokens, "test-admin-token")
+		authTokensMu.Unlock()
+	})
+	get := func(target string, admin bool) (int, string) {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		if admin {
+			req.Header.Set("Authorization", "Bearer test-admin-token")
+		}
+		rr := httptest.NewRecorder()
+		handleListMetrics(store, rr, req)
+		return rr.Code, rr.Body.String()
+	}
+
+	code, body := get("/api/metrics?view=hardware", false)
+	var inv []map[string]json.RawMessage
+	if code != http.StatusOK || json.Unmarshal([]byte(body), &inv) != nil || len(inv) != 1 {
+		t.Fatalf("public hardware view: %d %s", code, body)
+	}
+	if len(inv[0]) != 2 || string(inv[0]["id"]) != `"a"` || inv[0]["hardware"] == nil {
+		t.Fatalf("hardware view must hold only id + hardware: %s", body)
+	}
+	for _, banned := range []string{"fleet-secret", "203.0.113.5", "SERIAL-1", `"name"`} {
+		if strings.Contains(body, banned) {
+			t.Fatalf("public hardware view leaks %s: %s", banned, body)
+		}
+	}
+	if _, body := get("/api/metrics?view=hardware", true); !strings.Contains(body, "SERIAL-1") || strings.Contains(body, "fleet-secret") || strings.Contains(body, "203.0.113.5") {
+		t.Fatalf("admin hardware view: serials yes, secret and addresses no: %s", body)
+	}
+
+	if err := store.SavePrivacyConfig(&PrivacyConfig{Enabled: true, ShareToken: "share-1", TokenExpires: time.Now().Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := get("/api/metrics?view=hardware", false); code != http.StatusUnauthorized {
+		t.Fatalf("privacy mode, anonymous hardware view: %d", code)
+	}
+	if code, body := get("/api/metrics?view=hardware&token=share-1", false); code != http.StatusOK || strings.Contains(body, "SERIAL-1") {
+		t.Fatalf("privacy mode, share token: %d %s", code, body)
+	}
+}
