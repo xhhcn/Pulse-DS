@@ -2,7 +2,7 @@
 import Icon from './Icon.astro';
 ---
 
-<div class="min-h-screen flex flex-col items-center justify-center px-4 py-10">
+<div class="login-wrap">
   <div class="login-card">
     <div class="flex items-center gap-2.5 mb-7">
       <span id="brand-logo" class="inline-flex w-8 h-8 items-center justify-center rounded-lg" aria-hidden="true">
@@ -11,7 +11,7 @@ import Icon from './Icon.astro';
       <span id="brand-text" class="brand-name">Pulse-DS</span>
     </div>
     <h1 id="login-title" class="text-[16px] font-semibold" data-i18n="login.title">Sign in</h1>
-    <p id="login-subtitle" class="text-[13px] t-3 mt-1" data-i18n="login.subtitle"></p>
+    <p id="login-subtitle" class="text-[13px] t-3 mt-1" data-i18n="login.subtitle">Enter the admin password to continue.</p>
 
     <form id="login-form" class="mt-6 flex flex-col gap-4" novalidate>
       <div>

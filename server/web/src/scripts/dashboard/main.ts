@@ -39,6 +39,10 @@ let body: HTMLElement;
 let detail: DetailDialog;
 let sse: SSEClient;
 let pendingHashId: string | null = null;
+let revealed = false;
+// Settles with the first snapshot (or the first failure to get one).
+let firstSnapshotDone: () => void = () => {};
+const firstSnapshot = new Promise<void>((resolve) => (firstSnapshotDone = resolve));
 
 /* ------------------------------------------------------------------ */
 /* Auth gate (privacy mode)                                             */
@@ -88,6 +92,7 @@ async function gate(): Promise<boolean> {
 }
 
 function revealPage(): void {
+  revealed = true;
   const gateEl = document.getElementById('gate');
   const page = document.getElementById('page');
   if (page) page.hidden = false;
@@ -272,16 +277,20 @@ function ingest(list: any[]): void {
   state.byId = new Map(items.map((s) => [s.id, s]));
   state.rendered = true;
   paint();
+  firstSnapshotDone();
   prefetchHardware();
   const openId = detail.openId;
   if (openId) detail.update(state.byId.get(openId) || null);
-  if (pendingHashId) {
-    const id = pendingHashId;
-    pendingHashId = null;
-    // A shared #server/… link opens while the page is still loading: nobody is
-    // waiting on a click, so the dialog can wait longer for its inventory.
-    if (state.byId.has(id)) detail.open(id, false, 2000);
-  }
+  openPendingHash();
+}
+
+function openPendingHash(): void {
+  if (!pendingHashId || !revealed || !state.rendered) return;
+  const id = pendingHashId;
+  pendingHashId = null;
+  // A shared #server/… link opens while the page is still loading: nobody is
+  // waiting on a click, so the dialog can wait longer for its inventory.
+  if (state.byId.has(id)) detail.open(id, false, 2000);
 }
 
 async function loadOnce(): Promise<void> {
@@ -295,6 +304,7 @@ async function loadOnce(): Promise<void> {
     }
     if (!state.rendered) {
       body.innerHTML = emptyHtml('error', err instanceof Error ? err.message : String(err));
+      firstSnapshotDone();
     }
   }
 }
@@ -562,9 +572,6 @@ function setupControls(): void {
 async function boot(): Promise<void> {
   body = document.getElementById('systems-body') as HTMLElement;
   applyI18n(document);
-  const allowed = await gate();
-  if (!allowed) return;
-  revealPage();
 
   const cfg = navbarConfig() || {};
   state.showTraffic = cfg.show_traffic === true;
@@ -601,9 +608,12 @@ async function boot(): Promise<void> {
   };
 
   setupControls();
+  // The data sets out together with the access check rather than after it:
+  // the server only ever sends what this visitor may see (anonymous requests
+  // in privacy mode are refused), and the first snapshot is then usually in
+  // by the time the check returns. The inventories come in parallel too.
   getTCPingConfig();
   startStream();
-  // In parallel with the stream's first snapshot, not after it.
   prefetchHardware();
 
   window.addEventListener('pulse:lang', () => {
@@ -619,6 +629,17 @@ async function boot(): Promise<void> {
   // the snapshot sent on reconnect brings the page up to date.
   window.addEventListener('beforeunload', () => sse?.close());
   document.documentElement.setAttribute('data-lang', getLang());
+
+  const allowed = await gate();
+  if (!allowed) {
+    sse.close();
+    return;
+  }
+  // Appear complete: give the first snapshot a moment rather than show four
+  // skeleton rows that the list then replaces, pushing the footer down.
+  await Promise.race([firstSnapshot, new Promise((resolve) => window.setTimeout(resolve, 1000))]);
+  revealPage();
+  openPendingHash();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

@@ -10,7 +10,7 @@ import { Modal } from '../core/modal';
 import { fillClass, healthPill, locationHtml, osHtml } from './row';
 import { renderTags, patchLiveTags } from './tags';
 import { cpuSummary, diskSummary, memorySummary, nicSummary, renderHardware, renderIssues, syncScrollHints, systemRows, updateScrollHint } from './hardware';
-import { TCPingPanel, latestLatencyHtml, tcpingConfigured } from './tcping';
+import { TCPingPanel, latestLatencyHtml, prefetchTCPingHistory, tcpingConfigured } from './tcping';
 import type { Server } from './state';
 
 type Tab = 'overview' | 'hardware' | 'tcping';
@@ -72,6 +72,13 @@ export class DetailDialog {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]');
       if (b) this.showTab(b.dataset.tab as Tab);
     });
+    // Heading for the TCPing tab: start fetching its chart now.
+    const tpTab = this.root.querySelector<HTMLElement>('[data-tab="tcping"]');
+    for (const ev of ['pointerenter', 'pointerdown', 'focus']) {
+      tpTab?.addEventListener(ev, () => {
+        if (this.current && !this.tcpingMounted) prefetchTCPingHistory(this.current);
+      });
+    }
     this.q('prev').addEventListener('click', () => this.step(-1));
     this.q('next').addEventListener('click', () => this.step(1));
     this.q('copy').addEventListener('click', async (e) => {
@@ -213,7 +220,7 @@ export class DetailDialog {
     this.syncTabs(s);
     if (this.tab === 'tcping' && this.tcpingMounted && s.tcpingSig !== this.tcpSig) {
       this.tcpSig = s.tcpingSig;
-      this.tcping.refresh();
+      this.tcping.refresh(s.tcpingSig);
     }
     this.syncNav(s.id);
   }

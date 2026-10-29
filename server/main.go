@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/flate"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -1894,11 +1895,18 @@ func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
 				inventories = append(inventories, inventory{ID: m.ID, Hardware: m.Hardware})
 			}
 		}
-		writeJSON(w, http.StatusOK, inventories)
+		writeJSONGzip(w, r, http.StatusOK, inventories)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, metrics)
+	// The admin's list carries the agent secrets: that one is not compressed.
+	for _, m := range metrics {
+		if m.Secret != "" {
+			writeJSON(w, http.StatusOK, metrics)
+			return
+		}
+	}
+	writeJSONGzip(w, r, http.StatusOK, metrics)
 }
 
 // sseGzip writes one SSE response as a gzip stream in which every frame is a
@@ -3976,22 +3984,82 @@ func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
 	}
 }
 
-// writeCachedJSON ships an already-encoded body. We deliberately set the
-// same headers as writeJSON so cache-hit responses are byte-equivalent to
-// fresh responses; the only difference is that we skipped the encoder.
-//
-// The body is a json.Encoder output (so it ends with '\n'); we reuse it as
-// is to keep wire-format identical to writeJSON.
-func writeCachedJSON(w http.ResponseWriter, status int, body []byte) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Expires", "0")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+// JSON bodies of a kilobyte or more that carry no secret go out gzipped when
+// the client takes it, as nginx already does in the Docker image: a host's
+// 24 h TCPing history is ~300 KB of JSON and ~20 KB compressed, all hardware
+// inventories together ~40 KB and ~6 KB. Each body is compressed into a
+// buffer by a pooled writer, at most four at a time; when all four are busy
+// the body goes out as it is rather than waiting, so a burst of requests
+// cannot pile up compressor memory.
+const jsonGzipMin = 1024
+
+var (
+	jsonGzipPool = sync.Pool{New: func() interface{} {
+		zw, _ := gzip.NewWriterLevel(nil, gzip.DefaultCompression)
+		return zw
+	}}
+	jsonGzipSlots = make(chan struct{}, 4)
+)
+
+func gzipJSONBody(body []byte) ([]byte, bool) {
+	select {
+	case jsonGzipSlots <- struct{}{}:
+	default:
+		return nil, false
+	}
+	defer func() { <-jsonGzipSlots }()
+	var buf bytes.Buffer
+	zw := jsonGzipPool.Get().(*gzip.Writer)
+	zw.Reset(&buf)
+	_, err := zw.Write(body)
+	if cerr := zw.Close(); err == nil {
+		err = cerr
+	}
+	zw.Reset(io.Discard) // do not keep this response's buffer alive in the pool
+	jsonGzipPool.Put(zw)
+	if err != nil {
+		return nil, false
+	}
+	return buf.Bytes(), true
+}
+
+// writeJSONBody sends an encoded body (json.Encoder layout: the value and a
+// newline, so a cached body and a fresh one are the same bytes) with
+// writeJSON's headers, compressed as described above. Only for responses
+// without secrets.
+func writeJSONBody(w http.ResponseWriter, r *http.Request, status int, body []byte) {
+	h := w.Header()
+	h.Set("Content-Type", "application/json")
+	h.Set("Cache-Control", "no-cache, no-store, must-revalidate, private")
+	h.Set("Pragma", "no-cache")
+	h.Set("Expires", "0")
+	h.Set("X-Content-Type-Options", "nosniff")
+	if len(body) >= jsonGzipMin {
+		h.Add("Vary", "Accept-Encoding")
+		if acceptsGzip(r) {
+			if gz, ok := gzipJSONBody(body); ok {
+				h.Set("Content-Encoding", "gzip")
+				body = gz
+			}
+		}
+	}
+	h.Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(status)
 	if _, err := w.Write(body); err != nil {
-		log.Printf("⚠️  Failed to write cached JSON response: %v", err)
+		log.Printf("⚠️  Failed to write JSON response: %v", err)
 	}
+}
+
+// writeJSONGzip is writeJSON for responses that can be large and carry no
+// secrets.
+func writeJSONGzip(w http.ResponseWriter, r *http.Request, status int, payload interface{}) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("⚠️  Failed to encode JSON response: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSONBody(w, r, status, append(body, '\n'))
 }
 
 func portFromEnv() string {
@@ -4177,7 +4245,7 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 	// Cache stores the already-encoded JSON body, so a hit can be served
 	// without re-running json.Marshal — measurably reduces CPU under load.
 	if body, found := getCachedTCPingResultsJSON(clientID, target); found {
-		writeCachedJSON(w, http.StatusOK, body)
+		writeJSONBody(w, r, http.StatusOK, body)
 		return
 	}
 
@@ -4204,7 +4272,7 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 
 	cacheTCPingResults(clientID, target, response)
 
-	writeJSON(w, http.StatusOK, response)
+	writeJSONGzip(w, r, http.StatusOK, response)
 }
 
 // Handle get navbar config

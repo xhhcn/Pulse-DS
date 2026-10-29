@@ -9,7 +9,8 @@
  * resolution exactly like the surrounding text, so lines and tick labels stay
  * crisp on any pixel ratio, zoom level or scaled display — none of the canvas
  * backing-store pitfalls, and no chart library to ship. Data comes from
- * /api/tcping/history (last 24 h) and is re-fetched when a new sample lands.
+ * /api/tcping/history (last 24 h), fetched as the pointer heads for the tab
+ * and again whenever a new sample lands.
  */
 import { esc, attr } from '../core/dom';
 import { getJSON } from '../core/api';
@@ -61,6 +62,36 @@ export function tcpingConfigured(): boolean {
 
 export function invalidateTCPingConfig(): void {
   config = null;
+  histories.clear();
+}
+
+/* ------------------------------------------------------------------ */
+/* History requests                                                     */
+/* ------------------------------------------------------------------ */
+// A host's 24 h history is fetched when the pointer heads for the TCPing tab
+// (hover, focus, press), so the chart is usually in by the time the tab
+// opens. A request for the same samples (same tcping signature) is shared,
+// for a few hosts and a few minutes at most.
+const histories = new Map<string, { sig: string; at: number; res: Promise<any> }>();
+const HISTORY_HOSTS = 3;
+const HISTORY_MAX_AGE = 5 * MINUTE;
+
+function history(id: string, sig: string): Promise<any> {
+  const hit = histories.get(id);
+  if (hit && hit.sig === sig && Date.now() - hit.at < HISTORY_MAX_AGE) return hit.res;
+  const entry = { sig, at: Date.now(), res: getJSON(`/api/tcping/history?client_id=${encodeURIComponent(id)}`) };
+  histories.delete(id);
+  histories.set(id, entry);
+  // A failed request is not handed to the next caller.
+  entry.res.catch(() => {
+    if (histories.get(id) === entry) histories.delete(id);
+  });
+  while (histories.size > HISTORY_HOSTS) histories.delete(histories.keys().next().value as string);
+  return entry.res;
+}
+
+export function prefetchTCPingHistory(s: Server): void {
+  if (!s.hideTcping && tcpingConfigured()) history(s.id, s.tcpingSig || '').catch(() => {});
 }
 
 function targetName(address: string): string {
@@ -68,11 +99,11 @@ function targetName(address: string): string {
   return tg?.name || address;
 }
 
-/** "Cloudflare 1.6 ms · GitHub 17 ms" from the server's latest samples. */
 /**
- * The latest latency per target as HTML for the overview's network card. Each
- * target ("GitHub 62 ms") wraps as one unit, so a line breaks between targets;
- * only a name longer than the whole line wraps inside itself.
+ * The latest latency per target as HTML for the overview's network card, with
+ * the same three significant digits as the TCPing tab. Each target
+ * ("GitHub 61.6 ms") wraps as one unit, so a line breaks between targets; only
+ * a name longer than the whole line wraps inside itself.
  */
 export function latestLatencyHtml(s: Server): string {
   const d = s.raw?.tcping_data;
@@ -84,7 +115,7 @@ export function latestLatencyHtml(s: Server): string {
     if (!v) continue;
     const lat = Number(v.latency);
     const ok = Number.isFinite(lat) && lat > 0 && lat <= LOSS_MS;
-    parts.push(`<span class="lat-part">${esc(targetName(addr))}\u00a0${ok ? lat.toFixed(lat < 10 ? 1 : 0) + '\u00a0ms' : esc(t('tcping.timeout'))}</span>`);
+    parts.push(`<span class="lat-part">${esc(targetName(addr))}\u00a0${ok ? fmtMs(lat).replace(' ', '\u00a0') : esc(t('tcping.timeout'))}</span>`);
   }
   return parts.join(' · ');
 }
@@ -125,6 +156,7 @@ interface Layout {
 export class TCPingPanel {
   private root: HTMLElement;
   private systemId = '';
+  private sig = '';
   private cfg: TCPingConfig | null = null;
   private active: string | null = null;
   private data = new Map<string, Point[]>();
@@ -149,6 +181,7 @@ export class TCPingPanel {
     }
     this.teardown();
     this.systemId = s.id;
+    this.sig = s.tcpingSig || '';
     const cfg = await getTCPingConfig();
     if (this.systemId !== s.id) return;
     if (!cfg || !cfg.targets.length) {
@@ -179,8 +212,9 @@ export class TCPingPanel {
   }
 
   /** Called when the server reports a new tcping sample for this system. */
-  async refresh(): Promise<void> {
+  async refresh(sig: string): Promise<void> {
     if (!this.systemId || this.loading) return;
+    this.sig = sig;
     await this.load(true);
   }
 
@@ -204,7 +238,7 @@ export class TCPingPanel {
         (tg, i) =>
           `<button type="button" class="tp-target" data-target="${attr(tg.address)}" aria-pressed="false" title="${attr(tg.name && tg.name !== tg.address ? `${tg.name} · ${tg.address}` : tg.address)}">
             <span class="tp-name"><span class="dot" style="background:${PALETTE[i % PALETTE.length]}"></span><span class="truncate min-w-0">${esc(tg.name || tg.address)}</span></span>
-            <span class="tp-stats"><span>${esc(t('tcping.latest'))} <b data-tp-latest>—</b></span><span>${esc(t('tcping.avg'))} <b data-tp-avg>—</b></span><span>${esc(t('tcping.loss'))} <b data-tp-loss>—</b></span></span>
+            <span class="tp-stats"><span><span>${esc(t('tcping.latest'))}</span><b data-tp-latest>—</b></span><span><span>${esc(t('tcping.avg'))}</span><b data-tp-avg>—</b></span><span><span>${esc(t('tcping.lossShort'))}</span><b data-tp-loss>—</b></span></span>
           </button>`,
       )
       .join('');
@@ -271,7 +305,7 @@ export class TCPingPanel {
       if (!cfg) return;
       let res: any;
       try {
-        res = await getJSON(`/api/tcping/history?client_id=${encodeURIComponent(id)}`);
+        res = await history(id, this.sig);
       } catch {
         if (!incremental && token === this.token) this.status(esc(t('common.noData')));
         return;
@@ -341,7 +375,7 @@ export class TCPingPanel {
         const e = btn.querySelector<HTMLElement>(sel);
         if (e && e.textContent !== v) e.textContent = v;
       };
-      set('[data-tp-latest]', !st.hasLatest ? '—' : st.latest == null ? t('tcping.timeout') : fmtMs(st.latest));
+      set('[data-tp-latest]', !st.hasLatest ? '—' : st.latest == null ? t('tcping.timeoutShort') : fmtMs(st.latest));
       set('[data-tp-avg]', st.count ? fmtMs(st.avg) : '—');
       set('[data-tp-loss]', st.count ? fmtLoss(st.loss) : '—');
     });
@@ -649,12 +683,13 @@ function fmtMs(v: number): string {
 /**
  * One rule for the header total and every target card: whole percent, with a
  * decimal only below 1% where it carries meaning (0%, <0.1%, 0.4%, 5%, 12%).
- * Whole numbers also keep the target cards' stats on one line.
+ * 0.96% rounds to "1%", not "1.0%".
  */
 function fmtLoss(v: number): string {
   if (!(v > 0)) return '0%';
   if (v < 0.1) return '<0.1%';
-  return `${v < 1 ? v.toFixed(1) : Math.round(v)}%`;
+  const tenth = Math.round(v * 10) / 10;
+  return tenth < 1 ? `${tenth.toFixed(1)}%` : `${Math.round(v)}%`;
 }
 
 function cssEscape(v: string): string {

@@ -24,6 +24,9 @@ let rendered = false;
 let orderSaving = false;
 let heldSnapshot: any[] | null = null;
 let sse: SSEClient | null = null;
+// Settles with the first list (or the first failure to get one).
+let firstListDone: () => void = () => {};
+const firstList = new Promise<void>((resolve) => (firstListDone = resolve));
 // The fleet-wide agent secret for the install commands. Live rows no longer
 // carry it (the stream never sends secrets), so it comes from the settings.
 let sharedSecret = '';
@@ -44,38 +47,37 @@ function fail(err: unknown, key: string): void {
 /* ------------------------------------------------------------------ */
 async function gate(): Promise<boolean> {
   const base = apiBase();
-  try {
-    const st = await fetch(`${base}/api/auth/status`, { cache: 'no-store' });
-    if (st.ok) {
-      const d = await st.json();
-      if (!d.set) {
-        window.location.href = '/login?redirect=' + encodeURIComponent('/admin');
-        return false;
-      }
-    }
-  } catch {}
-  const token = adminToken();
-  if (!token) {
+  const toLogin = (): boolean => {
     window.location.href = '/login?redirect=' + encodeURIComponent('/admin');
     return false;
-  }
-  try {
-    const res = await fetch(`${base}/api/auth/verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    });
-    const data = res.ok ? await res.json().catch(() => null) : null;
-    const valid = res.status !== 401 && !(data && data.valid === false);
-    if (!valid) {
-      redirectToLogin('/admin');
-      return false;
-    }
-    return true;
-  } catch {
+  };
+  const token = adminToken();
+  // Both questions go out at once, one round trip instead of two: is a
+  // password set at all, and is this session still good.
+  const status = fetch(`${base}/api/auth/status`, { cache: 'no-store' })
+    .then((res) => (res.ok ? res.json() : null))
+    .catch(() => null);
+  const verify = token
+    ? fetch(`${base}/api/auth/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      }).then(
+        async (res) => {
+          const data = res.ok ? await res.json().catch(() => null) : null;
+          return res.status !== 401 && !(data && data.valid === false);
+        },
+        () => false,
+      )
+    : Promise.resolve(false);
+  const st = await status;
+  if (st && !st.set) return toLogin();
+  if (!token) return toLogin();
+  if (!(await verify)) {
     redirectToLogin('/admin');
     return false;
   }
+  return true;
 }
 
 function revealPage(): void {
@@ -173,6 +175,7 @@ function renderRowHtml(s: any): string {
 
 function paint(): void {
   rendered = true;
+  firstListDone();
   const sub = document.getElementById('admin-subtitle');
   // The drag hint only makes sense with something to reorder and a pointer to drag with.
   const canDrag = systems.length > 1 && !window.matchMedia('(pointer: coarse)').matches;
@@ -242,7 +245,10 @@ async function loadOnce(): Promise<void> {
       redirectToLogin('/admin');
       return;
     }
-    if (!rendered) list.innerHTML = `<div class="py-12 text-center text-[13px] text-[var(--crit)]">${esc(t('admin.loadFailed'))}<div class="t-3 text-[12px] mt-1">${esc(err instanceof Error ? err.message : String(err))}</div></div>`;
+    if (!rendered) {
+      list.innerHTML = `<div class="py-12 text-center text-[13px] text-[var(--crit)]">${esc(t('admin.loadFailed'))}<div class="t-3 text-[12px] mt-1">${esc(err instanceof Error ? err.message : String(err))}</div></div>`;
+      firstListDone();
+    }
   }
 }
 
@@ -605,14 +611,27 @@ function renderShareState(cfg: any): void {
   }
 }
 
-async function loadSettings(): Promise<void> {
-  const [nav, priv, tcp] = await Promise.all([
+type SettingsData = [any, any, any];
+// The settings as last fetched: fetched once when the page loads, so the
+// dialog opens with its values in place instead of filling in a moment later.
+let settingsCache: SettingsData | null = null;
+// Whether the admin has changed anything since the dialog opened; a fresh
+// copy arriving after that must not overwrite what they typed.
+let settingsEdited = false;
+
+async function fetchSettings(): Promise<SettingsData> {
+  const data = (await Promise.all([
     getJSON('/api/navbar/config').catch(() => ({})),
     getJSON('/api/privacy/config').catch(() => ({})),
     getJSON('/api/tcping/config').catch(() => ({})),
-  ]);
+  ])) as SettingsData;
+  settingsCache = data;
+  if (data[0] && data[0].shared_secret) sharedSecret = data[0].shared_secret;
+  return data;
+}
+
+function fillSettings([nav, priv, tcp]: SettingsData): void {
   navbarCfg = nav || {};
-  if (navbarCfg.shared_secret) sharedSecret = navbarCfg.shared_secret;
   privacyCfg = priv || {};
   secretPending = false;
   pendingShareToken = privacyCfg.share_token || '';
@@ -713,6 +732,7 @@ async function saveSettings(): Promise<void> {
       }
       toast(t('settings.saved'), 'ok');
       modals.settings.close();
+      fetchSettings().catch(() => {});
       return;
     }
     if (stab === 'tcping') {
@@ -726,6 +746,7 @@ async function saveSettings(): Promise<void> {
       await sendJSON('POST', '/api/tcping/config', { targets, interval_secs: interval });
       toast(t('settings.saved'), 'ok');
       modals.settings.close();
+      fetchSettings().catch(() => {});
     }
   } catch (err) {
     if (err instanceof HttpError && err.status === 401) return redirectToLogin('/admin');
@@ -739,12 +760,25 @@ async function saveSettings(): Promise<void> {
 function setupSettings(): void {
   document.getElementById('settings-btn')?.addEventListener('click', async () => {
     showSTab('general');
+    const cached = settingsCache;
+    if (cached) fillSettings(cached);
+    settingsEdited = false;
     modals.settings.open();
     try {
-      await loadSettings();
+      const fresh = await fetchSettings();
+      if (modals.settings.isOpen && (!cached || !settingsEdited)) fillSettings(fresh);
     } catch (err) {
       fail(err, 'settings.saveFailed');
     }
+  });
+  // Typing, toggling, adding or removing a target, regenerating: anything but
+  // switching tabs or closing counts as editing.
+  const settingsRoot = document.getElementById('settings-modal') as HTMLElement;
+  const edited = () => (settingsEdited = true);
+  settingsRoot.addEventListener('input', edited);
+  settingsRoot.addEventListener('change', edited);
+  settingsRoot.addEventListener('click', (e) => {
+    if (!(e.target as HTMLElement).closest('[data-stab], [data-modal-close], #settings-save')) edited();
   });
   document.querySelectorAll<HTMLElement>('[data-stab]').forEach((b) => b.addEventListener('click', () => showSTab(b.dataset.stab as STab)));
   document.getElementById('settings-save')?.addEventListener('click', saveSettings);
@@ -755,6 +789,7 @@ function setupSettings(): void {
   });
   document.getElementById('s-secret-regen')?.addEventListener('click', () => modals.regen.open());
   document.getElementById('regen-confirm')?.addEventListener('click', () => {
+    settingsEdited = true;
     modals.regen.close();
     $('s-secret').value = randomToken(12, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_');
     $('s-secret').classList.add('border-[var(--warn)]');
@@ -955,17 +990,13 @@ async function boot(): Promise<void> {
   applyI18n(document);
   const ok = await gate();
   if (!ok) return;
-  revealPage();
 
   ['add', 'edit', 'delete', 'settings', 'regen', 'password'].forEach((k) => {
     modals[k] = new Modal(document.getElementById(`${k}-modal`) as HTMLElement);
   });
   wireList();
-  getJSON<any>('/api/navbar/config')
-    .then((cfg) => {
-      if (cfg && cfg.shared_secret) sharedSecret = cfg.shared_secret;
-    })
-    .catch(() => {});
+  // Also brings the agent secret for the install commands.
+  fetchSettings().catch(() => {});
   setupAdd();
   setupEdit();
   setupDelete();
@@ -983,6 +1014,11 @@ async function boot(): Promise<void> {
   });
   window.addEventListener('beforeunload', () => sse?.close());
   document.documentElement.setAttribute('data-lang', getLang());
+
+  // Appear complete: give the first list a moment rather than show a
+  // "Loading…" line that the rows then replace.
+  await Promise.race([firstList, new Promise((resolve) => window.setTimeout(resolve, 1000))]);
+  revealPage();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

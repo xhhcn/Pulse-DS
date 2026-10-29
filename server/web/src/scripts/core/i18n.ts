@@ -271,8 +271,10 @@ const D: Record<string, [string, string]> = {
   'tcping.latest': ['Now', '当前'],
   'tcping.avg': ['Average', '平均'],
   'tcping.loss': ['Packet loss', '丢包'],
+  'tcping.lossShort': ['Loss', '丢包'],
   'tcping.allTargets': ['All targets', '全部目标'],
   'tcping.timeout': ['Timeout / failure', '超时 / 失败'],
+  'tcping.timeoutShort': ['Timeout', '超时'],
   'tcping.notConfigured': ['TCPing is not configured.', '尚未配置 TCPing。'],
   'tcping.noData': ['No samples in the last 24 hours.', '最近 24 小时没有采样数据。'],
   'tcping.loadFailed': ['Could not load the chart library.', '图表库加载失败。'],
@@ -461,6 +463,8 @@ export function applyI18n(root: ParentNode = document): void {
     const key = el.getAttribute('data-i18n');
     if (key) el.textContent = t(key);
   });
+  // The whole page is in its language now (see the boot script in Base.astro).
+  if (root === document) document.documentElement.classList.remove('i18n-pending');
   root.querySelectorAll<HTMLElement>('[data-i18n-placeholder]').forEach((el) => {
     const key = el.getAttribute('data-i18n-placeholder');
     if (key) el.setAttribute('placeholder', t(key));

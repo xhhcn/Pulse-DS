@@ -4,6 +4,23 @@
  */
 const openStack: Modal[] = [];
 
+/**
+ * Hiding the page's overflow also removes a classic scrollbar (Windows, most
+ * Linux desktops), which would shift the page behind the dialog sideways by
+ * the scrollbar's width on every open and close: pad the body by that width
+ * while the page is locked. Overlay scrollbars measure 0 and change nothing.
+ */
+function lockPageScroll(): void {
+  const gap = window.innerWidth - document.documentElement.clientWidth;
+  if (gap > 0) document.body.style.paddingRight = `${gap}px`;
+  document.body.classList.add('modal-open');
+}
+
+function unlockPageScroll(): void {
+  document.body.classList.remove('modal-open');
+  document.body.style.paddingRight = '';
+}
+
 export interface ModalOptions {
   onClose?: () => void;
   /** Return false to veto closing (e.g. while saving). */
@@ -39,8 +56,8 @@ export class Modal {
     this.root.classList.remove('is-closing');
     this.root.setAttribute('aria-hidden', 'false');
     if (this.root.parentElement !== document.body) document.body.appendChild(this.root);
+    if (openStack.length === 0) lockPageScroll();
     openStack.push(this);
-    document.body.classList.add('modal-open');
     // Resolve the focus target *after* the opener has finished filling the
     // dialog (buttons may get disabled meanwhile); a disabled target would
     // leave focus on the page and Escape would no longer reach the dialog.
@@ -67,7 +84,7 @@ export class Modal {
       this.root.setAttribute('aria-hidden', 'true');
       const i = openStack.indexOf(this);
       if (i >= 0) openStack.splice(i, 1);
-      if (openStack.length === 0) document.body.classList.remove('modal-open');
+      if (openStack.length === 0) unlockPageScroll();
       this.closing = false;
       this.opts.onClose?.();
       const lf = this.lastFocus;

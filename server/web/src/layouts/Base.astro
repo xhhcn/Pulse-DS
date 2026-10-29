@@ -43,6 +43,14 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
           lang = sys.indexOf('zh') === 0 ? 'zh' : 'en';
         }
         html.lang = lang === 'zh' ? 'zh-CN' : 'en';
+        // The pages are built with English text. In Chinese, keep that text
+        // hidden (its space kept) until the page script has put in the
+        // translation, rather than show one language and then the other; it
+        // shows regardless after 1.5 s.
+        if (lang === 'zh') {
+          html.classList.add('i18n-pending');
+          setTimeout(function () { html.classList.remove('i18n-pending'); }, 1500);
+        }
         var theme = null;
         try { theme = localStorage.getItem('preferred-theme'); } catch (e) {}
         if (theme !== 'dark' && theme !== 'light') {
