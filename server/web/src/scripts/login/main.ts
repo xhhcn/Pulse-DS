@@ -55,6 +55,20 @@ async function login(password: string): Promise<boolean> {
   return false;
 }
 
+/**
+ * The card is centred by CSS; from here on it keeps that top edge, so a
+ * message under the password extends it downwards (see .login-wrap).
+ */
+function holdCard(): void {
+  const wrap = document.querySelector<HTMLElement>('.login-wrap');
+  const card = wrap?.querySelector<HTMLElement>('.login-card');
+  if (!wrap || !card) return;
+  wrap.classList.remove('is-held');
+  const top = card.getBoundingClientRect().top - wrap.getBoundingClientRect().top;
+  wrap.style.setProperty('--login-top', `${top}px`);
+  wrap.classList.add('is-held');
+}
+
 function showError(msg: string): void {
   const el = document.getElementById('login-error') as HTMLElement;
   el.textContent = msg;
@@ -64,6 +78,8 @@ function showError(msg: string): void {
 async function boot(): Promise<void> {
   initNav();
   applyI18n(document);
+  holdCard();
+  window.addEventListener('resize', holdCard);
   const form = document.getElementById('login-form') as HTMLFormElement;
   const pw = document.getElementById('password') as HTMLInputElement;
   const confirmWrap = document.getElementById('confirm-wrap') as HTMLElement;
@@ -93,6 +109,9 @@ async function boot(): Promise<void> {
     confirm.required = true;
     pw.autocomplete = 'new-password';
     applyI18n(document);
+    // A first setup adds the confirm field: centre the taller card, unless
+    // a slow answer let typing start already.
+    if (!pw.value) holdCard();
   }
 
   let inFlight = false;

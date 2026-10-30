@@ -6,7 +6,7 @@ import { esc, attr, copyText, flashCopied } from '../core/dom';
 import { bytes, capacityPair, relativeAgo, speedMiB, uptimeLong } from '../core/format';
 import { icon, hydrateRemoteIcons } from '../core/icons';
 import { applyI18n, getLang, t } from '../core/i18n';
-import { Modal } from '../core/modal';
+import { Modal, topModal } from '../core/modal';
 import { fillClass, healthPill, locationHtml, osHtml } from './row';
 import { renderTags, patchLiveTags } from './tags';
 import { cpuSummary, diskSummary, memorySummary, nicSummary, renderHardware, renderIssues, syncScrollHints, systemRows, updateScrollHint } from './hardware';
@@ -14,6 +14,11 @@ import { TCPingPanel, latestLatencyHtml, prefetchTCPingHistory, tcpingConfigured
 import type { Server } from './state';
 
 type Tab = 'overview' | 'hardware' | 'tcping';
+
+/** A server stepped to may sit this many px off centre before the dialog
+ *  centres on it: about half a line, so servers whose dialogs differ by a
+ *  line leave the arrows where they are. */
+const STEP_SLACK = 12;
 
 export interface DetailHost {
   get(id: string): Server | null;
@@ -58,6 +63,8 @@ export class DetailDialog {
   private tcpSig = '';
   private tcping: TCPingPanel;
   private tcpingMounted = false;
+  /** Server whose overview the dialog was last centred on. */
+  private centredFor: string | null = null;
   private hashOwned = false;
   private suppressPop = false;
 
@@ -86,7 +93,9 @@ export class DetailDialog {
       const ok = await copyText(this.current?.name || '');
       flashCopied(btn, ok, t('common.copied'), t('common.copyFailed'));
     });
-    this.root.addEventListener('keydown', (e) => {
+    // On the document, like Escape (see modal.ts): focus may have fallen out.
+    document.addEventListener('keydown', (e) => {
+      if (topModal() !== this.modal || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.key === 'ArrowLeft') this.step(-1);
@@ -118,6 +127,9 @@ export class DetailDialog {
       true,
     );
     window.addEventListener('resize', () => {
+      // The dialog centres on what it shows; the overview is centred again
+      // the next time it is shown.
+      this.centredFor = null;
       if (this.modal.isOpen && this.tab === 'hardware') syncScrollHints(this.q('panel-hardware'));
     });
     window.addEventListener('pulse:lang', () => {
@@ -256,6 +268,7 @@ export class DetailDialog {
     }
     this.id = null;
     this.current = null;
+    this.centredFor = null;
     if (idFromHash()) {
       if (this.hashOwned) {
         this.suppressPop = true;
@@ -308,6 +321,13 @@ export class DetailDialog {
     (['overview', 'hardware', 'tcping'] as Tab[]).forEach((k) => {
       this.q('panel-' + k).hidden = k !== tab;
     });
+    // Each server's overview is shown centred (it opens that way; one reached
+    // with the arrows or on another tab is centred once it shows): other
+    // tabs keep the dialog's top edge.
+    if (tab === 'overview' && this.id && this.centredFor !== this.id && this.modal.isOpen) {
+      this.modal.place(STEP_SLACK);
+      this.centredFor = this.id;
+    }
     // A hidden panel has no width to measure: settle the table edge fades now.
     if (tab === 'hardware') syncScrollHints(this.q('panel-hardware'));
     if (tab === 'tcping' && this.current) {

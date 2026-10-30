@@ -1110,7 +1110,9 @@ html.kb .copy-btn:focus-visible {
     justify-self: end;
   }
   /* A single line, so every card has the same rhythm: the OS name truncates
-     first, a long location name stops at 40%, the uptime never shrinks. */
+     first, a long location name stops at 40%, the uptime never shrinks. A
+     line with anything in it is as tall as a flag from the start (see
+     .meta-line); a host that never reported has none and takes no room. */
   .srv-row > .c-meta {
     grid-area: meta;
     display: flex;
@@ -1119,6 +1121,9 @@ html.kb .copy-btn:focus-visible {
     white-space: nowrap;
     font-size: 12px;
     color: var(--text-2);
+  }
+  .srv-row > .c-meta:not(:empty) {
+    min-height: 22px;
   }
   .srv-row > .c-meta > * {
     display: flex;
@@ -1189,19 +1194,27 @@ html.kb .copy-btn:focus-visible {
 /* ============================================================
    Modal / dialog
    ============================================================ */
-/* A dialog hangs a fixed distance below the top of the window instead of
-   being centred: whatever changes inside it (another tab, the next server, a
-   message under a field) moves only its bottom edge, so the title, tabs and
-   arrows stay where the pointer is. */
+/* A dialog opens centred. While it stays open it keeps that top edge
+   (`is-held`, placed by Modal.place in modal.ts), so another tab or a
+   message under a field moves only its bottom edge. */
 .modal-root {
-  --modal-gap: clamp(16px, 6vh, 64px);
+  /* The least space left above and below a dialog as tall as the window
+     allows: v1.0.8's 16 px on laptop-sized windows, a little more on tall
+     screens. */
+  --modal-gap: clamp(16px, 2vh, 32px);
   position: fixed;
   inset: 0;
   z-index: 100;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   padding: var(--modal-gap) 16px;
+}
+@media (min-width: 640px) {
+  .modal-root.is-held {
+    align-items: flex-start;
+    padding-top: var(--modal-top);
+  }
 }
 .modal-backdrop {
   position: absolute;
@@ -1213,8 +1226,8 @@ html.kb .copy-btn:focus-visible {
   position: relative;
   width: 100%;
   max-width: 520px;
-  max-height: calc(100vh - 2 * var(--modal-gap));
-  max-height: calc(100dvh - 2 * var(--modal-gap));
+  /* The space between the paddings: whatever is left below a held top. */
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -1315,10 +1328,14 @@ body.modal-open {
   font-size: 12px;
   color: var(--text-2);
 }
+/* A flag (22 px) is taller than the text beside it and only shows once its
+   SVG has arrived: every part keeps a flag's height from the start, so a
+   line never grows when one lands. */
 .meta-line > * {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  min-height: 22px;
   white-space: nowrap;
 }
 .kv {
@@ -1712,16 +1729,22 @@ body.modal-open {
 }
 
 /* Login */
-/* The login card sits a little above the middle of the window with its top
-   edge fixed: a message under the password, or the confirm field of a first
-   setup, extends it downwards instead of moving the field being typed in. */
+/* The login card is centred; once the page knows whether it signs in or sets
+   a first password it keeps that top edge (`is-held`, login/main.ts), so a
+   message under the password extends it downwards instead of moving the
+   field being typed in. */
 .login-wrap {
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: max(40px, calc(50vh - 240px)) 16px 40px;
+  justify-content: center;
+  padding: 40px 16px;
+}
+.login-wrap.is-held {
+  justify-content: flex-start;
+  padding-top: var(--login-top);
 }
 .login-card {
   width: 100%;
