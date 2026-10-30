@@ -1194,9 +1194,9 @@ html.kb .copy-btn:focus-visible {
 /* ============================================================
    Modal / dialog
    ============================================================ */
-/* A dialog opens centred. While it stays open it keeps that top edge
-   (`is-held`, placed by Modal.place in modal.ts), so another tab or a
-   message under a field moves only its bottom edge. */
+/* A dialog is centred on what it shows: each tab at its own height, so a
+   short tab carries no empty space and a long one (most hardware tabs)
+   fills the window, less the gap above and below, and scrolls inside. */
 .modal-root {
   /* The least space left above and below a dialog as tall as the window
      allows: v1.0.8's 16 px on laptop-sized windows, a little more on tall
@@ -1210,12 +1210,6 @@ html.kb .copy-btn:focus-visible {
   justify-content: center;
   padding: var(--modal-gap) 16px;
 }
-@media (min-width: 640px) {
-  .modal-root.is-held {
-    align-items: flex-start;
-    padding-top: var(--modal-top);
-  }
-}
 .modal-backdrop {
   position: absolute;
   inset: 0;
@@ -1226,7 +1220,7 @@ html.kb .copy-btn:focus-visible {
   position: relative;
   width: 100%;
   max-width: 520px;
-  /* The space between the paddings: whatever is left below a held top. */
+  /* The space between the paddings. */
   max-height: 100%;
   display: flex;
   flex-direction: column;
@@ -1337,6 +1331,19 @@ body.modal-open {
   gap: 5px;
   min-height: 22px;
   white-space: nowrap;
+}
+/* A part whose text moves with the clock ("updated 5s ago"): all its forms
+   share one cell and only the current one shows, so it is as wide as the
+   widest from the start and the line never rewraps as the time changes. */
+.meta-line > .meta-steady {
+  display: inline-grid;
+}
+.meta-steady > * {
+  grid-area: 1 / 1;
+}
+.meta-steady > [aria-hidden] {
+  visibility: hidden;
+  user-select: none;
 }
 .kv {
   display: grid;

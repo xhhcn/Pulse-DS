@@ -1,7 +1,7 @@
 /**
  * Accessible modal controller for `.modal-root` elements:
- * backdrop click / Escape close, focus trap, scroll lock, stacking, and
- * placement (centred when opened, then holding its top edge).
+ * backdrop click / Escape close, focus trap, scroll lock, stacking.
+ * Placement is CSS alone (see .modal-root): centred on what it shows.
  */
 const openStack: Modal[] = [];
 
@@ -22,11 +22,6 @@ function unlockPageScroll(): void {
   document.body.style.paddingRight = '';
 }
 
-/** Below this width a dialog is a full-screen sheet and has no placement. */
-const centred = window.matchMedia('(min-width: 640px)');
-
-window.addEventListener('resize', () => openStack.forEach((m) => m.place(true)));
-
 // Keys reach the dialog on top wherever focus is: clicking text inside a
 // dialog, or a focused button disabling itself, leaves focus on the page,
 // and Escape (or Tab) would otherwise stop working.
@@ -44,9 +39,6 @@ export class Modal {
   private lastFocus: HTMLElement | null = null;
   private closing = false;
   private opts: ModalOptions;
-  /** Top edge the dialog opened at (centred); null until it is first placed. */
-  private home: number | null = null;
-  private watch: ResizeObserver;
 
   constructor(root: HTMLElement, opts: ModalOptions = {}) {
     this.root = root;
@@ -56,52 +48,10 @@ export class Modal {
     root.setAttribute('aria-hidden', 'true');
     root.querySelector('.modal-backdrop')?.addEventListener('click', () => this.close());
     root.querySelectorAll<HTMLElement>('[data-modal-close]').forEach((b) => b.addEventListener('click', () => this.close()));
-    // Watch the content rather than the panel: placing the panel changes its
-    // own height, but never the size of what is inside it.
-    this.watch = new ResizeObserver(() => this.place());
   }
 
   get isOpen(): boolean {
     return !this.root.hidden;
-  }
-
-  /**
-   * A dialog opens centred and then keeps its top edge while it stays open:
-   * another tab or a message under a field moves only its bottom edge, so
-   * the title and tabs stay under the pointer. If the new content would run
-   * past the bottom, the dialog rises just enough to show all of it; content
-   * too tall for the window at any position scrolls inside the dialog
-   * instead of moving it. Resizing the window centres it again.
-   *
-   * `centre`: true centres it on what it shows now; a number does so only
-   * when it would otherwise sit more than that many px off centre (so the
-   * next server, if about as tall, leaves the arrows where they are); false
-   * keeps the top edge. Called after layout, before paint (resize observer),
-   * so a placement is never drawn twice.
-   */
-  place(centre: boolean | number = false): void {
-    if (!this.isOpen || this.closing || !centred.matches) return;
-    const view = this.root.getBoundingClientRect().height;
-    const gap = parseFloat(getComputedStyle(this.root).paddingBottom) || 0;
-    const body = this.panel.querySelector<HTMLElement>('.modal-body');
-    const need = this.panel.getBoundingClientRect().height + (body ? body.scrollHeight - body.clientHeight : 0);
-    const room = view - 2 * gap;
-    // Within a pixel counts as fitting: sub-pixel rounding (zoomed pages)
-    // must not leave content that fits scrolling in a dialog that stayed put.
-    const fits = need <= room + 1;
-    const mid = Math.max(gap, (view - Math.min(need, room)) / 2);
-    if (this.home === null || centre === true || (typeof centre === 'number' && fits && Math.abs(this.home - mid) > centre)) this.home = mid;
-    let top = this.home;
-    if (fits && top + need > view - gap) top = Math.max(gap, view - gap - need);
-    this.root.style.setProperty('--modal-top', `${top}px`);
-    this.root.classList.add('is-held');
-  }
-
-  private unplace(): void {
-    this.watch.disconnect();
-    this.home = null;
-    this.root.classList.remove('is-held');
-    this.root.style.removeProperty('--modal-top');
   }
 
   open(): void {
@@ -113,12 +63,6 @@ export class Modal {
     if (this.root.parentElement !== document.body) document.body.appendChild(this.root);
     if (openStack.length === 0) lockPageScroll();
     openStack.push(this);
-    // First placed once the opener has filled the dialog (the observer's
-    // first report comes after this task's layout, before it is painted).
-    this.unplace();
-    const body = this.panel.querySelector('.modal-body');
-    for (const el of Array.from(this.panel.children)) if (el !== body) this.watch.observe(el);
-    if (body) for (const el of Array.from(body.children)) this.watch.observe(el);
     // Resolve the focus target *after* the opener has finished filling the
     // dialog (buttons may get disabled meanwhile); a disabled target would
     // leave focus on the page and Escape would no longer reach the dialog.
@@ -143,7 +87,6 @@ export class Modal {
       this.root.hidden = true;
       this.root.classList.remove('is-closing');
       this.root.setAttribute('aria-hidden', 'true');
-      this.unplace();
       const i = openStack.indexOf(this);
       if (i >= 0) openStack.splice(i, 1);
       if (openStack.length === 0) unlockPageScroll();

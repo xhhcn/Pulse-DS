@@ -15,11 +15,6 @@ import type { Server } from './state';
 
 type Tab = 'overview' | 'hardware' | 'tcping';
 
-/** A server stepped to may sit this many px off centre before the dialog
- *  centres on it: about half a line, so servers whose dialogs differ by a
- *  line leave the arrows where they are. */
-const STEP_SLACK = 12;
-
 export interface DetailHost {
   get(id: string): Server | null;
   neighbors(id: string): { prev: string | null; next: string | null };
@@ -40,6 +35,20 @@ export function idFromHash(): string | null {
   } catch {
     return m[1];
   }
+}
+
+/**
+ * "Updated 5s ago" changes width as time passes. Every form it can take sits
+ * invisibly in the same place (see .meta-steady), so the part keeps one width
+ * and the info line, which wraps on a phone, never rewraps under the reader.
+ */
+function updatedHtml(iso: string, zh: boolean): string {
+  const label = t('detail.updated');
+  const now = Date.now();
+  const forms = [0, 59e3, 3599e3, 86399e3, 999 * 86400e3].map((ms) => relativeAgo(new Date(now - ms).toISOString(), zh));
+  return `<span class="meta-steady" title="${attr(iso)}"><span>${esc(label)} ${esc(relativeAgo(iso, zh))}</span>${forms
+    .map((f) => `<span aria-hidden="true">${esc(label)} ${esc(f)}</span>`)
+    .join('')}</span>`;
 }
 
 function kvHtml(rows: Array<[string, string]>): string {
@@ -63,8 +72,6 @@ export class DetailDialog {
   private tcpSig = '';
   private tcping: TCPingPanel;
   private tcpingMounted = false;
-  /** Server whose overview the dialog was last centred on. */
-  private centredFor: string | null = null;
   private hashOwned = false;
   private suppressPop = false;
 
@@ -127,9 +134,6 @@ export class DetailDialog {
       true,
     );
     window.addEventListener('resize', () => {
-      // The dialog centres on what it shows; the overview is centred again
-      // the next time it is shown.
-      this.centredFor = null;
       if (this.modal.isOpen && this.tab === 'hardware') syncScrollHints(this.q('panel-hardware'));
     });
     window.addEventListener('pulse:lang', () => {
@@ -268,7 +272,6 @@ export class DetailDialog {
     }
     this.id = null;
     this.current = null;
-    this.centredFor = null;
     if (idFromHash()) {
       if (this.hashOwned) {
         this.suppressPop = true;
@@ -321,13 +324,6 @@ export class DetailDialog {
     (['overview', 'hardware', 'tcping'] as Tab[]).forEach((k) => {
       this.q('panel-' + k).hidden = k !== tab;
     });
-    // Each server's overview is shown centred (it opens that way; one reached
-    // with the arrows or on another tab is centred once it shows): other
-    // tabs keep the dialog's top edge.
-    if (tab === 'overview' && this.id && this.centredFor !== this.id && this.modal.isOpen) {
-      this.modal.place(STEP_SLACK);
-      this.centredFor = this.id;
-    }
     // A hidden panel has no width to measure: settle the table edge fades now.
     if (tab === 'hardware') syncScrollHints(this.q('panel-hardware'));
     if (tab === 'tcping' && this.current) {
@@ -364,9 +360,7 @@ export class DetailDialog {
       s.location ? locationHtml(s, true) : '',
       // An offline host's last uptime describes nothing running; "updated … ago" below says when it was last seen.
       s.reported && s.online ? `<span title="${attr(t('detail.uptime'))}">${esc(uptimeLong(s.uptime, zh))}</span>` : '',
-      s.reported
-        ? `<span title="${attr(s.updatedAt)}">${esc(t('detail.updated'))} ${esc(relativeAgo(s.updatedAt, zh))}</span>`
-        : `<span class="t-3">${esc(t('admin.noAgent'))}</span>`,
+      s.reported ? updatedHtml(s.updatedAt, zh) : `<span class="t-3">${esc(t('admin.noAgent'))}</span>`,
     ].filter(Boolean).join('');
     const tags = this.q('tags');
     const shown = this.host.showTags() ? s.tags : [];
