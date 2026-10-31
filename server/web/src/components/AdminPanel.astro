@@ -52,7 +52,8 @@ const customCodePlaceholder = [
     <div class="modal-body flex flex-col gap-4">
       <div>
         <label class="field-label" for="add-name"><span data-i18n="admin.form.name">Display name</span> <span class="text-[var(--crit)]">*</span></label>
-        <input id="add-name" name="name" class="input" required autocomplete="off" data-i18n-placeholder="admin.form.namePlaceholder" data-autofocus />
+        <input id="add-name" name="name" class="input" required autocomplete="off" aria-describedby="add-name-error" data-i18n-placeholder="admin.form.namePlaceholder" data-autofocus />
+        <p id="add-name-error" class="field-error mt-1.5" hidden></p>
       </div>
       <p class="field-hint flex items-start gap-2"><Icon name="info" size={13} class="shrink-0 mt-0.5" /><span data-i18n="admin.form.note"></span></p>
       <p id="add-error" class="field-error" hidden></p>
@@ -76,7 +77,8 @@ const customCodePlaceholder = [
     <div class="modal-body flex flex-col gap-4">
       <div>
         <label class="field-label" for="edit-name"><span data-i18n="admin.form.name">Display name</span> <span class="text-[var(--crit)]">*</span></label>
-        <input id="edit-name" name="name" class="input" required autocomplete="off" data-autofocus />
+        <input id="edit-name" name="name" class="input" required autocomplete="off" aria-describedby="edit-name-error" data-autofocus />
+        <p id="edit-name-error" class="field-error mt-1.5" hidden></p>
       </div>
       <div>
         <label class="field-label" for="edit-tags" data-i18n="admin.form.tags">Tags</label>
@@ -107,12 +109,12 @@ const customCodePlaceholder = [
 <div id="delete-modal" class="modal-root" hidden>
   <div class="modal-backdrop"></div>
   <div class="modal-panel" role="alertdialog" aria-modal="true">
-    <div class="modal-head">
+    <div class="modal-head sm:items-center">
       <div class="flex items-center gap-3">
         <span class="inline-flex w-9 h-9 items-center justify-center rounded-xl text-[var(--crit)]" style="background:rgba(239,68,68,.12)"><Icon name="trash" size={17} /></span>
         <div class="modal-title" data-i18n="admin.deleteModal.title">Delete server</div>
       </div>
-      <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
+      <button type="button" class="icon-btn -mr-1.5 -mt-1 sm:mt-0" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
     </div>
     <div class="modal-body text-[13px] t-2" id="delete-text"></div>
     <div class="modal-foot">
@@ -130,7 +132,7 @@ const customCodePlaceholder = [
       <div class="modal-title" data-i18n="settings.title">Settings</div>
       <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
     </div>
-    <div class="px-5 pt-3 shrink-0">
+    <div class="px-4 sm:px-5 pt-3 shrink-0">
       <div class="tabs" role="tablist" id="settings-tabs">
         <button type="button" class="tab" role="tab" data-stab="general" aria-selected="true"><Icon name="sliders" size={13} /><span data-i18n="settings.tab.general">General</span></button>
         <button type="button" class="tab" role="tab" data-stab="display" aria-selected="false"><Icon name="palette" size={13} /><span data-i18n="settings.tab.display">Display</span></button>
@@ -195,25 +197,32 @@ const customCodePlaceholder = [
           <div><div class="setting-title" data-i18n="privacy.enable"></div><div class="setting-desc" data-i18n="privacy.enableDesc"></div></div>
           <label class="switch"><input type="checkbox" id="s-privacy" /><span></span></label>
         </div>
-        <div id="s-share" class="subcard p-4 flex flex-col gap-3">
-          <div><div class="setting-title" data-i18n="privacy.share"></div><div class="setting-desc" data-i18n="privacy.shareDesc"></div></div>
-          <div id="s-share-current" hidden>
-            <label class="field-label" data-i18n="privacy.current">Current link</label>
-            <div class="flex gap-2">
-              <input id="s-share-link" class="input mono flex-1 text-[12px]" readonly />
-              <button type="button" id="s-share-copy" class="btn"><span class="i-copy"><Icon name="copy" size={14} /></span><span class="i-check text-[var(--ok)]" hidden><Icon name="check" size={14} /></span><span data-i18n="common.copy">Copy</span></button>
-            </div>
-            <p id="s-share-expires" class="field-hint"></p>
+        <div class="subcard p-4 flex flex-col gap-3">
+          <div>
+            <div class="setting-title" data-i18n="privacy.share"></div>
+            <div class="setting-desc" data-i18n="privacy.shareDesc"></div>
+            <div id="s-share-off" class="setting-desc" data-i18n="privacy.shareNeedsPrivacy" hidden></div>
           </div>
-          <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-end">
-            <div>
-              <label class="field-label" for="s-share-hours" data-i18n="privacy.hours">Valid for (hours)</label>
-              <input id="s-share-hours" type="number" min="1" max="720" value="24" class="input" />
+          <div id="s-share" class="flex flex-col gap-3 min-w-0">
+            <div id="s-share-current" hidden>
+              <label class="field-label" for="s-share-link" data-i18n="privacy.current">Current link</label>
+              <div class="flex gap-2">
+                <input id="s-share-link" class="input mono flex-1 text-[12px]" readonly />
+                <button type="button" id="s-share-copy" class="btn"><span class="i-copy"><Icon name="copy" size={14} /></span><span class="i-check text-[var(--ok)]" hidden><Icon name="check" size={14} /></span><span data-i18n="common.copy">Copy</span></button>
+              </div>
+              <p id="s-share-expires" class="field-hint"></p>
             </div>
-            <button type="button" id="s-share-generate" class="btn btn-primary"><Icon name="key" size={14} /><span data-i18n="privacy.generate">Generate link</span></button>
-            <button type="button" id="s-share-revoke" class="btn"><span data-i18n="privacy.revoke">Revoke link</span></button>
+            <div class="flex flex-col sm:flex-row sm:items-end gap-2">
+              <fieldset id="s-share-new" class="flex flex-col sm:flex-row sm:items-end gap-2 min-w-0 sm:flex-1">
+                <div class="flex-1 min-w-0">
+                  <label class="field-label" for="s-share-hours" data-i18n="privacy.hours">Valid for (1–720 hours)</label>
+                  <input id="s-share-hours" type="number" min="1" max="720" value="24" class="input" />
+                </div>
+                <button type="button" id="s-share-generate" class="btn btn-primary"><Icon name="key" size={14} /><span data-i18n="privacy.generate">Generate link</span></button>
+              </fieldset>
+              <button type="button" id="s-share-revoke" class="btn" hidden><span data-i18n="privacy.revoke">Revoke link</span></button>
+            </div>
           </div>
-          <p class="field-hint" data-i18n="privacy.hoursHint"></p>
         </div>
       </div>
       <!-- TCPing -->
@@ -286,7 +295,7 @@ const customCodePlaceholder = [
     </div>
     <div class="modal-foot">
       <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
-      <button type="submit" class="btn btn-warn" data-i18n="password.submit">Change password</button>
+      <button type="submit" class="btn btn-primary" data-i18n="password.submit">Change password</button>
     </div>
   </form>
 </div>

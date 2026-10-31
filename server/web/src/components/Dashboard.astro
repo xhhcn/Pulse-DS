@@ -9,7 +9,7 @@ const sorts = ['default', 'name', 'health', 'uptime', 'cpu', 'memory', 'disk', '
     <button type="button" class="stat" data-filter="all" aria-pressed="true">
       <span class="stat-head" data-i18n="dash.stat.total">Total</span>
       <span class="stat-value" data-stat="total">–</span>
-      <span class="stat-sub" data-stat="total-sub"></span>
+      <span class="stat-sub is-parts" data-stat="total-sub"></span>
     </button>
     <button type="button" class="stat" data-filter="online" aria-pressed="false">
       <span class="stat-head" data-i18n="dash.stat.online">Online</span>
@@ -24,7 +24,7 @@ const sorts = ['default', 'name', 'health', 'uptime', 'cpu', 'memory', 'disk', '
     <button type="button" class="stat tone-warn" data-filter="attention" aria-pressed="false">
       <span class="stat-head" data-i18n="dash.stat.attention">Hardware alerts</span>
       <span class="stat-value" data-stat="attention">–</span>
-      <span class="stat-sub" data-stat="attention-sub"></span>
+      <span class="stat-sub is-parts" data-stat="attention-sub"></span>
     </button>
   </div>
 
@@ -37,7 +37,7 @@ const sorts = ['default', 'name', 'health', 'uptime', 'cpu', 'memory', 'disk', '
       <div class="flex items-center gap-2">
         <div class="relative flex-1 sm:flex-none">
           <span class="absolute left-3 top-1/2 -translate-y-1/2 t-3 pointer-events-none"><Icon name="search" size={14} /></span>
-          <input id="system-filter-input" type="search" autocomplete="off" class="input pl-8 sm:w-64" data-i18n-placeholder="dash.search" data-i18n-title="dash.searchTitle" title="Search servers by name, location, OS or CPU" placeholder="Search…" />
+          <input id="system-filter-input" type="search" autocomplete="off" class="input pl-8 sm:w-64" data-i18n-title="dash.searchTitle" title="Search servers by name, location, OS or CPU" placeholder="Search…" />
         </div>
         <div class="relative" id="sort-wrap">
           <button id="sort-btn" type="button" class="btn" aria-haspopup="menu" aria-expanded="false">

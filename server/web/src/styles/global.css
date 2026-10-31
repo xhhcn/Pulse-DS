@@ -317,6 +317,15 @@ html.kb :focus-visible {
   color: var(--text-2);
   background: var(--surface-2);
 }
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* A field a message is about (set by the page, cleared when it is edited). */
+.input[aria-invalid='true'],
+.input[aria-invalid='true']:focus {
+  border-color: var(--crit);
+}
 .input-sm {
   height: 30px;
   font-size: 12px;
@@ -337,6 +346,10 @@ html.kb :focus-visible {
 .field-error {
   font-size: 12px;
   color: var(--crit);
+}
+fieldset:disabled .field-label,
+fieldset:disabled .field-hint {
+  opacity: 0.5;
 }
 
 .switch {
@@ -388,12 +401,12 @@ html.kb :focus-visible {
 .setting-row:first-child {
   border-top: 0;
 }
-.setting-row .setting-title {
+.setting-title {
   font-size: 13px;
   font-weight: 500;
   color: var(--text);
 }
-.setting-row .setting-desc {
+.setting-desc {
   font-size: 12px;
   color: var(--text-3);
   margin-top: 2px;
@@ -538,10 +551,32 @@ html.kb :focus-visible {
   display: none;
 }
 
-/* One target of the overview's latency line wraps as a unit. */
-.lat-part {
-  display: inline-block;
-  max-width: 100%;
+/* A short line of parts ("8 cores · 16 threads · 3.20 GHz", see sepsHtml)
+   that wraps between parts only. Every part carries its "·" in front, and
+   the inner box starts one separator to the left of the outer one, so the
+   separator of a part that begins a line falls outside and is cut away: no
+   line starts or ends with a dot. */
+.seps {
+  display: block;
+  overflow: hidden;
+}
+.seps > span {
+  display: flex;
+  flex-wrap: wrap;
+  margin-left: -1em;
+}
+.seps > span > span {
+  position: relative;
+  min-width: 0;
+  padding-left: 1em;
+}
+.seps > span > span::before {
+  content: '·';
+  position: absolute;
+  left: 0;
+  width: 1em;
+  text-align: center;
+  color: var(--text-3);
 }
 
 /* TCPing targets in the settings: name · address · ✕ on one line. On a phone
@@ -863,9 +898,14 @@ html.i18n-pending [data-i18n] {
 .stat:first-child {
   border-left: 0;
 }
-.stat:hover,
-.stat[aria-pressed='true'] {
+.stat:hover {
   background: var(--surface-2);
+}
+/* A tile that filters the list is marked like a selected tab; "all" is the
+   resting state and carries no mark. */
+.stat[aria-pressed='true']:not([data-filter='all']) {
+  background: var(--surface-2);
+  box-shadow: inset 0 -2px 0 var(--text);
 }
 .stat-head {
   font-size: 12px;
@@ -895,6 +935,10 @@ html.i18n-pending [data-i18n] {
   overflow: hidden;
   overflow-wrap: anywhere;
   word-break: keep-all; /* no break inside 等待探针; breaks fall at the separators */
+}
+/* A breakdown of parts wraps between them (.seps) and shows every part. */
+.stat-sub.is-parts {
+  display: block;
 }
 @media (max-width: 767px) {
   .stat-strip {
@@ -1314,6 +1358,23 @@ body.modal-open {
 @keyframes sheet-out { from { opacity: 1; } to { opacity: 0; } }
 
 /* Detail dialog internals */
+/* The server name with its health pill. A pill that wraps under a long name
+   lines up with the name, not with the status dot in front of it; the dot
+   sits centred on the name's first line (24 px). */
+.title-line {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+  padding-left: 17px;
+}
+.title-line > .dot {
+  position: absolute;
+  left: 0;
+  top: 8.5px;
+}
 .meta-line {
   display: flex;
   align-items: center;
@@ -1391,9 +1452,9 @@ body.modal-open {
   white-space: normal;
   min-width: 140px;
 }
-/* On a phone every cell stays on one line: compact rows that scroll sideways
-   beat three-line rows. */
-@media (max-width: 639px) {
+/* Below the widest dialog every cell stays on one line: the wide tables
+   scroll sideways there anyway, and compact rows beat two-line ones. */
+@media (max-width: 1023px) {
   .dtable td .wrap {
     white-space: nowrap;
     min-width: 0;
@@ -1496,6 +1557,11 @@ body.modal-open {
 }
 .metric-card .mc-line {
   overflow-wrap: anywhere;
+}
+/* An offline host's figures are its last report: greyed, like its list row. */
+.is-stale .live-val,
+.is-stale .metric-card .mc-val {
+  color: var(--text-2);
 }
 /* Two-column key/value blocks share one label width so the value columns
    of consecutive blocks (processor, memory, system) line up. */
@@ -1682,6 +1748,14 @@ body.modal-open {
   flex-direction: column;
   gap: 8px;
   pointer-events: none;
+  transition: bottom 0.15s ease;
+}
+/* A dialog on a phone is a full-screen sheet with its buttons along the
+   bottom edge: a toast rises above them instead of covering them. */
+@media (max-width: 639px) {
+  body.modal-open .toast-host {
+    bottom: calc(68px + env(safe-area-inset-bottom));
+  }
 }
 .toast {
   pointer-events: auto;

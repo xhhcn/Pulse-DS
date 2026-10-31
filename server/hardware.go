@@ -403,19 +403,19 @@ func evaluateHealth(hw *HardwareInfo, now time.Time) healthResult {
 		}
 		switch strings.ToLower(d.SMARTStatus) {
 		case "failed":
-			crit.add(name+": S.M.A.R.T. 整体判定为 FAILED", name+": S.M.A.R.T. overall health FAILED")
+			crit.add(name+": S.M.A.R.T. 整体健康检查未通过", name+": S.M.A.R.T. overall health FAILED")
 		}
 		if d.MediaErrors != nil && *d.MediaErrors > 0 {
-			crit.add(fmt.Sprintf("%s: NVMe 介质错误 %d", name, *d.MediaErrors), fmt.Sprintf("%s: %d NVMe media errors", name, *d.MediaErrors))
+			crit.add(fmt.Sprintf("%s: NVMe 介质错误 %d", name, *d.MediaErrors), fmt.Sprintf("%s: %s", name, countEN(*d.MediaErrors, "NVMe media error", "NVMe media errors")))
 		}
 		if d.SpareAvailPct != nil && *d.SpareAvailPct < healthNVMeSpareCritPct {
-			crit.add(fmt.Sprintf("%s: NVMe 可用备件仅 %.0f%%", name, *d.SpareAvailPct), fmt.Sprintf("%s: NVMe spare capacity only %.0f%%", name, *d.SpareAvailPct))
+			crit.add(fmt.Sprintf("%s: NVMe 可用备用块仅剩 %.0f%%", name, *d.SpareAvailPct), fmt.Sprintf("%s: NVMe spare capacity only %.0f%%", name, *d.SpareAvailPct))
 		}
 		if d.Reallocated != nil && *d.Reallocated > 0 {
-			warn.add(fmt.Sprintf("%s: 重映射扇区 %d", name, *d.Reallocated), fmt.Sprintf("%s: %d reallocated sectors", name, *d.Reallocated))
+			warn.add(fmt.Sprintf("%s: 重映射扇区 %d", name, *d.Reallocated), fmt.Sprintf("%s: %s", name, countEN(*d.Reallocated, "reallocated sector", "reallocated sectors")))
 		}
 		if d.Pending != nil && *d.Pending > 0 {
-			warn.add(fmt.Sprintf("%s: 待映射扇区 %d", name, *d.Pending), fmt.Sprintf("%s: %d pending sectors", name, *d.Pending))
+			warn.add(fmt.Sprintf("%s: 待映射扇区 %d", name, *d.Pending), fmt.Sprintf("%s: %s", name, countEN(*d.Pending, "pending sector", "pending sectors")))
 		}
 		if d.WearPct != nil && *d.WearPct >= healthNVMeWearWarnPct {
 			warn.add(fmt.Sprintf("%s: SSD 剩余寿命仅 %.0f%%", name, 100-*d.WearPct), fmt.Sprintf("%s: SSD life remaining only %.0f%%", name, 100-*d.WearPct))
@@ -447,13 +447,13 @@ func evaluateHealth(hw *HardwareInfo, now time.Time) healthResult {
 			crit.add(fmt.Sprintf("ZFS 池 %s 状态 %s", z.Name, z.State), fmt.Sprintf("ZFS pool %s state %s", z.Name, z.State))
 		}
 		if z.Errors > 0 {
-			warn.add(fmt.Sprintf("ZFS 池 %s 累计错误 %d", z.Name, z.Errors), fmt.Sprintf("ZFS pool %s has %d errors", z.Name, z.Errors))
+			warn.add(fmt.Sprintf("ZFS 池 %s 累计错误 %d", z.Name, z.Errors), fmt.Sprintf("ZFS pool %s has %s", z.Name, countEN(z.Errors, "error", "errors")))
 		}
 	}
 
 	if hw.Memory != nil {
 		if hw.Memory.ECCUncorrectable > 0 {
-			crit.add(fmt.Sprintf("内存 ECC 不可纠正错误 %d", hw.Memory.ECCUncorrectable), fmt.Sprintf("%d uncorrectable ECC memory errors", hw.Memory.ECCUncorrectable))
+			crit.add(fmt.Sprintf("内存 ECC 不可纠正错误 %d", hw.Memory.ECCUncorrectable), countEN(hw.Memory.ECCUncorrectable, "uncorrectable ECC memory error", "uncorrectable ECC memory errors"))
 		}
 		if hw.Memory.ECCRecent >= healthECCRecentWarn {
 			warn.add(fmt.Sprintf("内存 ECC 可纠正错误持续增加：近 24 小时 +%d（累计 %d）", hw.Memory.ECCRecent, hw.Memory.ECCCorrectable),
@@ -463,9 +463,9 @@ func evaluateHealth(hw *HardwareInfo, now time.Time) healthResult {
 
 	for _, fs := range hw.Filesystems {
 		if fs.UsedPct >= healthFSCritPct {
-			crit.add(fmt.Sprintf("%s 已用 %.0f%%", fs.Mount, fs.UsedPct), fmt.Sprintf("%s is %.0f%% full", fs.Mount, fs.UsedPct))
+			crit.add(fmt.Sprintf("文件系统 %s 已用 %.0f%%", fs.Mount, fs.UsedPct), fmt.Sprintf("Filesystem %s is %.0f%% full", fs.Mount, fs.UsedPct))
 		} else if fs.UsedPct >= healthFSWarnPct {
-			warn.add(fmt.Sprintf("%s 已用 %.0f%%", fs.Mount, fs.UsedPct), fmt.Sprintf("%s is %.0f%% full", fs.Mount, fs.UsedPct))
+			warn.add(fmt.Sprintf("文件系统 %s 已用 %.0f%%", fs.Mount, fs.UsedPct), fmt.Sprintf("Filesystem %s is %.0f%% full", fs.Mount, fs.UsedPct))
 		}
 	}
 
@@ -503,7 +503,7 @@ func evaluateHealth(hw *HardwareInfo, now time.Time) healthResult {
 	if hw.CPU != nil && hw.CPU.Threads > 0 && len(hw.Load) > 0 {
 		if hw.Load[0] > float64(hw.CPU.Threads)*healthLoadPerCoreWarn {
 			warn.add(fmt.Sprintf("负载 %.1f 超过 %d 线程的 %.0f 倍", hw.Load[0], hw.CPU.Threads, healthLoadPerCoreWarn),
-				fmt.Sprintf("Load %.1f exceeds %.0f× the %d threads", hw.Load[0], healthLoadPerCoreWarn, hw.CPU.Threads))
+				fmt.Sprintf("Load %.1f exceeds %.0f× the %s", hw.Load[0], healthLoadPerCoreWarn, countEN(hw.CPU.Threads, "thread", "threads")))
 		}
 	}
 
@@ -516,7 +516,7 @@ func evaluateHealth(hw *HardwareInfo, now time.Time) healthResult {
 			// traffic", which separates the two cases almost as well.
 			adminUp := n.AdminState == "up" || (n.AdminState == "" && (n.RxBytes > 0 || n.TxBytes > 0))
 			if adminUp {
-				warn.add(fmt.Sprintf("网卡 %s 链路 %s", n.Name, n.OperState), fmt.Sprintf("NIC %s link %s", n.Name, n.OperState))
+				warn.add(nicLinkZh(n.Name, n.OperState), fmt.Sprintf("NIC %s link %s", n.Name, n.OperState))
 			}
 			continue
 		}
@@ -597,6 +597,33 @@ func ipmiKindEn(kind string) string {
 		return "PSU"
 	}
 	return "Sensor"
+}
+
+// countEN writes an English count with the noun in the right number
+// ("1 pending sector", "3 pending sectors").
+func countEN[T int | int64 | uint64](n T, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
+}
+
+// nicLinkZh says in Chinese what the kernel's operstate of a port that should
+// have a link means; the English list keeps the kernel's own word.
+func nicLinkZh(name, state string) string {
+	switch state {
+	case "down":
+		return "网卡 " + name + " 链路断开"
+	case "lowerlayerdown":
+		return "网卡 " + name + " 链路断开（下层接口未就绪）"
+	case "dormant":
+		return "网卡 " + name + " 链路休眠"
+	case "notpresent":
+		return "网卡 " + name + " 设备不存在"
+	case "testing":
+		return "网卡 " + name + " 链路测试中"
+	}
+	return "网卡 " + name + " 链路状态 " + state
 }
 
 func sensorName(s Sensor) string {

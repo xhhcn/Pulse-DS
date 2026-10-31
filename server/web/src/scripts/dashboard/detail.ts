@@ -2,8 +2,8 @@
  * Server detail dialog: header, tabs (overview / hardware / tcping),
  * live patching while open, keyboard navigation and hash deep-links.
  */
-import { esc, attr, copyText, flashCopied } from '../core/dom';
-import { bytes, capacityPair, relativeAgo, speedMiB, uptimeLong } from '../core/format';
+import { esc, attr, copyText, flashCopied, sepsHtml, sepsText } from '../core/dom';
+import { bytes, capacityPair, dateTime, relativeAgo, speedMiB, uptimeLong } from '../core/format';
 import { icon, hydrateRemoteIcons } from '../core/icons';
 import { applyI18n, getLang, t } from '../core/i18n';
 import { Modal, topModal } from '../core/modal';
@@ -43,16 +43,49 @@ export function idFromHash(): string | null {
  * and the info line, which wraps on a phone, never rewraps under the reader.
  */
 function updatedHtml(iso: string, zh: boolean): string {
-  const label = t('detail.updated');
   const now = Date.now();
   const forms = [0, 59e3, 3599e3, 86399e3, 999 * 86400e3].map((ms) => relativeAgo(new Date(now - ms).toISOString(), zh));
-  return `<span class="meta-steady" title="${attr(iso)}"><span>${esc(label)} ${esc(relativeAgo(iso, zh))}</span>${forms
-    .map((f) => `<span aria-hidden="true">${esc(label)} ${esc(f)}</span>`)
+  const text = (ago: string) => esc(t('detail.updated', { t: ago }));
+  const at = new Date(iso);
+  return `<span class="meta-steady"${isNaN(at.getTime()) ? '' : ` title="${attr(dateTime(at))}"`}><span>${text(relativeAgo(iso, zh))}</span>${forms
+    .map((f) => `<span aria-hidden="true">${text(f)}</span>`)
     .join('')}</span>`;
 }
 
-function kvHtml(rows: Array<[string, string]>): string {
-  if (!rows.length) return `<dt class="t-3" style="grid-column:1/-1">${esc(t('detail.noHardware'))}</dt>`;
+/**
+ * The markup each live part of the overview was last drawn from. A part is
+ * redrawn only when that changes: the browser writes markup back its own way
+ * (U+00A0 as &nbsp;), so comparing with innerHTML would redraw it on every
+ * update and drop a selection in progress, such as an IP being copied.
+ */
+const drawnFrom = new WeakMap<Element, string>();
+
+function draw(e: Element | null, html: string): void {
+  if (!e || drawnFrom.get(e) === html) return;
+  e.innerHTML = html;
+  drawnFrom.set(e, html);
+}
+
+/**
+ * Key/value rows: while the same keys are listed, only the values that
+ * changed are redrawn, so the live rates do not take the IP rows (and a
+ * selection in them) along every few seconds.
+ */
+function drawRows(dl: Element | null, rows: Array<[string, string]>): void {
+  if (!dl) return;
+  const dts = dl.querySelectorAll(':scope > dt');
+  const dds = dl.querySelectorAll(':scope > dd');
+  if (dts.length === rows.length && dds.length === rows.length && rows.every(([k], i) => dts[i].textContent === k)) {
+    rows.forEach(([, v], i) => draw(dds[i], v));
+    return;
+  }
+  draw(dl, rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join(''));
+  dl.querySelectorAll(':scope > dd').forEach((dd, i) => drawnFrom.set(dd, rows[i][1]));
+}
+
+/** The system card; one that has nothing to list says why. */
+function kvHtml(rows: Array<[string, string]>, s: Server): string {
+  if (!rows.length) return `<dt class="t-3" style="grid-column:1/-1">${esc(t(s.reported ? 'detail.noHardware' : 'detail.noReport'))}</dt>`;
   return rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
 }
 
@@ -347,9 +380,11 @@ export class DetailDialog {
     // No hardware health (a VPS, or a host that never reported): leave the
     // title alone instead of trailing it with a lone dash.
     this.q('health').innerHTML = s.health ? healthPill(s, 'md') : '';
+    this.q('health').hidden = !s.health;
     this.q('type').hidden = true;
     const status = s.online ? `<span class="text-[var(--ok)]">${esc(t('common.online'))}</span>` : `<span class="text-[var(--crit)]">${esc(t('common.offline'))}</span>`;
     const typeText = s.type === 'DS' ? t('detail.type.DS') : s.type === 'VPS' ? t('detail.type.VPS') : s.type;
+    const uptime = s.reported && s.online && s.uptime ? uptimeLong(s.uptime, zh) : '';
     // Only what the host has actually told us: a system added in the admin
     // page but never reached by its agent would otherwise read
     // "offline — — 0 h updated —", which says nothing.
@@ -359,7 +394,7 @@ export class DetailDialog {
       s.os || s.osIcon ? osHtml(s, true) : '',
       s.location ? locationHtml(s, true) : '',
       // An offline host's last uptime describes nothing running; "updated … ago" below says when it was last seen.
-      s.reported && s.online ? `<span title="${attr(t('detail.uptime'))}">${esc(uptimeLong(s.uptime, zh))}</span>` : '',
+      uptime ? `<span>${esc(t('detail.upFor', { t: uptime }))}</span>` : '',
       s.reported ? updatedHtml(s.updatedAt, zh) : `<span class="t-3">${esc(t('admin.noAgent'))}</span>`,
     ].filter(Boolean).join('');
     const tags = this.q('tags');
@@ -375,98 +410,114 @@ export class DetailDialog {
     hydrateRemoteIcons(this.q('head'));
   }
 
-  private lines(a: string, b: string): string {
-    return `<div class="mc-line">${esc(a || '—')}</div><div class="mc-line">${b ? esc(b) : '&nbsp;'}</div>`;
+  /**
+   * The two lines under a card's figure, each a list of parts that wraps
+   * between parts only (the first line of the CPU card is the model name,
+   * which may wrap anywhere). An empty second line keeps its height.
+   */
+  private lines(a: string[], b: string[]): string {
+    const line = (parts: string[]) => sepsText(parts) || '&nbsp;';
+    return `<div class="mc-line">${a.length ? line(a) : '—'}</div><div class="mc-line">${line(b)}</div>`;
   }
 
   private memSub(s: Server): string {
-    let l1 = s.memoryInfo ? capacityPair(s.memoryInfo) : '—';
-    if (s.swapInfo && !/^0 B \/ 0 B$/.test(s.swapInfo)) l1 += ` · ${t('detail.swap')} ${capacityPair(s.swapInfo)}`;
+    const l1 = s.memoryInfo ? [capacityPair(s.memoryInfo)] : [];
+    if (l1.length && s.swapInfo && !/^0 B \/ 0 B$/.test(s.swapInfo)) l1.push(`${t('detail.swap')} ${capacityPair(s.swapInfo)}`);
     return this.lines(l1, memorySummary(s));
   }
 
   private cpuSub(s: Server): string {
     const c = cpuSummary(s);
-    return this.lines(c.model, c.topo);
+    return `<div class="mc-line">${esc(c.model || '—')}</div><div class="mc-line">${sepsText(c.topo) || '&nbsp;'}</div>`;
   }
 
   private diskSub(s: Server): string {
-    return this.lines(s.diskInfo ? capacityPair(s.diskInfo) : '—', diskSummary(s));
+    return this.lines(s.diskInfo ? [capacityPair(s.diskInfo)] : [], diskSummary(s));
   }
 
   private netRows(s: Server): Array<[string, string]> {
     const rows: Array<[string, string]> = [];
-    rows.push([t('detail.download'), `<span class="tnum">${esc(speedMiB(s.netIn))}</span>`]);
-    rows.push([t('detail.upload'), `<span class="tnum">${esc(speedMiB(s.netOut))}</span>`]);
+    // A host that never reported has no rates, only zero-filled defaults.
+    const rate = (v: number) => (s.reported ? `<span class="tnum live-val">${esc(speedMiB(v))}</span>` : '<span class="t-3">—</span>');
+    rows.push([t('detail.download'), rate(s.netIn)]);
+    rows.push([t('detail.upload'), rate(s.netOut)]);
     const lat = latestLatencyHtml(s);
-    if (lat) rows.push([t('detail.latency'), lat]);
+    if (lat) rows.push([t('detail.latency'), `<div class="live-val">${lat}</div>`]);
     const nics = nicSummary(s);
-    if (nics) rows.push([t('detail.interfaces'), esc(nics)]);
-    if (this.host.showTraffic()) rows.push([t('detail.traffic'), `↓ ${esc(bytes(s.totalIn))} <span class="t-3">·</span> ↑ ${esc(bytes(s.totalOut))}`]);
+    if (nics.length) rows.push([t('detail.interfaces'), sepsText(nics)]);
+    if (this.host.showTraffic()) {
+      rows.push([
+        t('detail.traffic'),
+        s.reported ? sepsHtml([`↓ ${esc(bytes(s.totalIn))}`, `↑ ${esc(bytes(s.totalOut))}`].map((x) => x.replace(/ /g, '\u00a0'))) : '<span class="t-3">—</span>',
+      ]);
+    }
     if (s.raw?.ipv4) rows.push(['IPv4', `<span class="mono">${esc(s.raw.ipv4)}</span>`]);
     if (s.raw?.ipv6) rows.push(['IPv6', `<span class="mono">${esc(s.raw.ipv6)}</span>`]);
     return rows;
   }
 
   private renderOverview(s: Server): void {
-    const metric = (key: string, ic: string, field: string, v: number, sub: string) => `
+    // A host that never reported has only zero-filled defaults: a dash and an
+    // empty track, as in its list row, rather than "0.0%" that looks measured.
+    const metric = (key: string, ic: string, field: string, v: number) => `
       <div class="metric-card">
         <div class="mc-head"><span class="inline-flex items-center gap-1.5">${icon(ic, 14)}${esc(t(key))}</span></div>
-        <div class="mc-val" data-o="${field}-val">${v.toFixed(1)}%</div>
-        <div class="bigmeter-track"><div class="meter-fill ${fillClass(v, s.online)}" data-o="${field}-fill" style="width:${v.toFixed(1)}%"></div></div>
-        <div class="mc-sub" data-o="${field}-sub">${sub}</div>
+        <div class="mc-val live-val" data-o="${field}-val">${s.reported ? `${v.toFixed(1)}%` : '—'}</div>
+        <div class="bigmeter-track"><div class="meter-fill ${fillClass(v, s.online)}" data-o="${field}-fill" style="width:${s.reported ? v.toFixed(1) : '0'}%"></div></div>
+        <div class="mc-sub" data-o="${field}-sub"></div>
       </div>`;
     const sysCard = `
       <div class="subcard p-4">
         <div class="section-title">${icon('server', 14)}${esc(t('detail.system'))}</div>
-        <dl class="kv" data-o="system">${kvHtml(systemRows(s))}</dl>
+        <dl class="kv" data-o="system"></dl>
       </div>`;
     const net = `
       <div class="subcard p-4">
         <div class="section-title">${icon('network', 14)}${esc(t('detail.network'))}</div>
-        <dl class="kv" data-o="netkv">${this.netRows(s).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>
+        <dl class="kv" data-o="netkv"></dl>
       </div>`;
+    // An offline host's figures are its last report: shown, but greyed.
+    this.q('panel-overview').classList.toggle('is-stale', s.reported && !s.online);
     this.q('panel-overview').innerHTML = `
       <div data-o="issues" class="${s.issues.length ? 'issues-box mb-4' : ''}">${renderIssues(s, this.issuesOpen)}</div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        ${metric('detail.cpu', 'cpu', 'cpu', s.cpu, this.cpuSub(s))}
-        ${metric('detail.memory', 'memory', 'mem', s.memory, this.memSub(s))}
-        ${metric('detail.disk', 'hard-drive', 'disk', s.disk, this.diskSub(s))}
+        ${metric('detail.cpu', 'cpu', 'cpu', s.cpu)}
+        ${metric('detail.memory', 'memory', 'mem', s.memory)}
+        ${metric('detail.disk', 'hard-drive', 'disk', s.disk)}
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">${net}${sysCard}</div>`;
+    this.drawLive(s, true);
+  }
+
+  /** The overview's text parts that follow the live updates (see draw()). */
+  private drawLive(s: Server, system: boolean): void {
+    const p = this.q('panel-overview');
+    const q = (f: string) => p.querySelector(`[data-o="${f}"]`);
+    draw(q('cpu-sub'), this.cpuSub(s));
+    draw(q('mem-sub'), this.memSub(s));
+    draw(q('disk-sub'), this.diskSub(s));
+    drawRows(q('netkv'), this.netRows(s));
+    if (system) draw(q('system'), kvHtml(systemRows(s), s));
   }
 
   private patchOverview(s: Server): void {
     const p = this.q('panel-overview');
+    p.classList.toggle('is-stale', s.reported && !s.online);
     const q = (f: string) => p.querySelector<HTMLElement>(`[data-o="${f}"]`);
     const bar = (field: string, v: number) => {
       const val = q(`${field}-val`);
       const fill = q(`${field}-fill`);
-      if (val) val.textContent = v.toFixed(1) + '%';
+      const text = s.reported ? v.toFixed(1) + '%' : '—';
+      if (val && val.textContent !== text) val.textContent = text;
       if (fill) {
-        fill.style.width = v.toFixed(1) + '%';
+        fill.style.width = (s.reported ? v.toFixed(1) : '0') + '%';
         fill.className = `meter-fill ${fillClass(v, s.online)}`;
       }
     };
     bar('cpu', s.cpu);
     bar('mem', s.memory);
     bar('disk', s.disk);
-    const set = (f: string, v: string) => {
-      const e = q(f);
-      if (e && e.textContent !== v) e.textContent = v;
-    };
-    const setHtml = (f: string, html: string) => {
-      const e = q(f);
-      if (e && e.innerHTML !== html) e.innerHTML = html;
-    };
-    setHtml('cpu-sub', this.cpuSub(s));
-    setHtml('mem-sub', this.memSub(s));
-    setHtml('disk-sub', this.diskSub(s));
-    setHtml('netkv', this.netRows(s).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join(''));
-    if (this.hwKey(s) !== this.hwSig || !s.hardware) {
-      const sys = q('system');
-      if (sys) sys.innerHTML = kvHtml(systemRows(s));
-    }
+    this.drawLive(s, this.hwKey(s) !== this.hwSig || !s.hardware);
   }
 
   /** Changes whenever the hardware panel must be redrawn, loading state included. */
@@ -499,8 +550,7 @@ export class DetailDialog {
       issues.innerHTML = renderIssues(s, this.issuesOpen);
       issues.className = s.issues.length ? 'issues-box mb-4' : '';
     }
-    const sys = this.q('panel-overview').querySelector<HTMLElement>('[data-o="system"]');
-    if (sys) sys.innerHTML = kvHtml(systemRows(s));
+    draw(this.q('panel-overview').querySelector('[data-o="system"]'), kvHtml(systemRows(s), s));
   }
 
   private shell(): string {
@@ -509,12 +559,10 @@ export class DetailDialog {
 <div class="modal-panel is-xl" role="dialog" aria-modal="true" aria-labelledby="server-dialog-title">
   <div class="modal-head" data-d="head">
     <div class="min-w-0 flex-1">
-      <div class="flex items-center gap-x-2.5 gap-y-1 flex-wrap min-w-0">
-        <div class="flex items-center gap-2.5 min-w-0 max-w-full">
-          <span class="dot" data-d="dot"></span>
-          <h2 class="modal-title truncate min-w-0" id="server-dialog-title" data-d="name"></h2>
-        </div>
-        <span data-d="health"></span>
+      <div class="title-line">
+        <span class="dot" data-d="dot"></span>
+        <h2 class="modal-title truncate min-w-0 max-w-full" id="server-dialog-title" data-d="name"></h2>
+        <span data-d="health" hidden></span>
         <span data-d="type" hidden></span>
       </div>
       <div class="meta-line mt-1.5" data-d="meta"></div>
@@ -527,7 +575,7 @@ export class DetailDialog {
       <button type="button" class="icon-btn" data-modal-close data-i18n-title="common.close">${icon('x', 18)}</button>
     </div>
   </div>
-  <div class="px-5 pt-3 shrink-0">
+  <div class="px-4 sm:px-5 pt-3 shrink-0">
     <div class="tabs" role="tablist" data-d="tabs">
       <button type="button" class="tab" role="tab" data-tab="overview" aria-selected="true">${icon('gauge', 13)}<span data-i18n="detail.tab.overview"></span></button>
       <button type="button" class="tab" role="tab" data-tab="hardware" aria-selected="false">${icon('cpu', 13)}<span data-i18n="detail.tab.hardware"></span><span class="count" hidden></span></button>

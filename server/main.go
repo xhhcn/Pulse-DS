@@ -17,6 +17,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -5351,9 +5352,9 @@ func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
 
 	// Check if IP is locked due to too many failed attempts
 	if time.Now().Before(attempt.lockedUntil) {
+		until := attempt.lockedUntil
 		loginAttemptsMu.Unlock()
-		// Return same error message to avoid information disclosure
-		http.Error(w, "invalid password", http.StatusUnauthorized)
+		writeLoginLocked(w, until)
 		return
 	}
 
@@ -5401,9 +5402,12 @@ func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
 		// Lock IP after 5 failed attempts for 15 minutes
 		if attempt.count >= 5 {
 			attempt.lockedUntil = time.Now().Add(15 * time.Minute)
+			until := attempt.lockedUntil
+			loginAttemptsMu.Unlock()
+			writeLoginLocked(w, until)
+			return
 		}
 		loginAttemptsMu.Unlock()
-		// Return same error message to avoid information disclosure
 		http.Error(w, "invalid password", http.StatusUnauthorized)
 		return
 	}
@@ -5428,6 +5432,20 @@ func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"token":   token,
 	})
+}
+
+// writeLoginLocked answers a client that is locked out of logging in: 429,
+// with the wait in Retry-After and in the body (a page served from another
+// origin cannot read the header). Saying so gives nothing away: the client
+// already knows its last five passwords were wrong, and while the lock holds
+// no password is checked at all.
+func writeLoginLocked(w http.ResponseWriter, until time.Time) {
+	secs := int(math.Ceil(time.Until(until).Seconds()))
+	if secs < 1 {
+		secs = 1
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(secs))
+	writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{"error": "too many failed attempts", "retry_after": secs})
 }
 
 // handleAuthVerify verifies an auth token

@@ -24,35 +24,59 @@ async function passwordIsSet(): Promise<boolean> {
   return true;
 }
 
-async function setup(password: string): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const res = await fetch(apiBase() + '/api/auth/setup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    });
-    if (!res.ok) return { ok: false, error: (await res.text().catch(() => '')) || t('login.setupFailed') };
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
+type Result = { ok: true } | { ok: false; error: string };
+
+function post(path: string, password: string): Promise<Response> {
+  return fetch(apiBase() + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
 }
 
-async function login(password: string): Promise<boolean> {
+async function setup(password: string): Promise<Result> {
+  let res: Response;
   try {
-    const res = await fetch(apiBase() + '/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    });
-    if (!res.ok) return false;
-    const d = await res.json();
-    if (d && d.success && d.token) {
-      localStorage.setItem(ADMIN_TOKEN_KEY, d.token);
-      return true;
-    }
-  } catch {}
-  return false;
+    res = await post('/api/auth/setup', password);
+  } catch {
+    return { ok: false, error: t('common.networkError') };
+  }
+  if (res.ok) return { ok: true };
+  if (res.status >= 500) return { ok: false, error: t('common.serverError', { status: res.status }) };
+  const text = await res.text().catch(() => '');
+  if (/already set/i.test(text)) return { ok: false, error: t('login.alreadySet') };
+  if (/too long/i.test(text)) return { ok: false, error: t('login.tooLong') };
+  if (/at least/i.test(text)) return { ok: false, error: t('login.tooShort') };
+  return { ok: false, error: t('login.setupFailed') };
+}
+
+/**
+ * Says what went wrong in words: a wrong password, a lockout after too many
+ * of them (and for how long), an unreachable or failing server.
+ */
+async function login(password: string): Promise<Result> {
+  let res: Response;
+  try {
+    res = await post('/api/auth/login', password);
+  } catch {
+    return { ok: false, error: t('common.networkError') };
+  }
+  if (res.status === 429) {
+    const body = await res.json().catch(() => null);
+    const secs = Number(body?.retry_after) || Number(res.headers.get('Retry-After')) || 15 * 60;
+    return { ok: false, error: t('login.locked', { n: Math.max(1, Math.ceil(secs / 60)) }) };
+  }
+  // 400 is a password no account can have (longer than any that can be set).
+  if (res.status === 401 || res.status === 400) return { ok: false, error: t('login.invalid') };
+  if (!res.ok) return { ok: false, error: t('common.serverError', { status: res.status }) };
+  const d = await res.json().catch(() => null);
+  if (!d || !d.success || !d.token) return { ok: false, error: t('common.serverError', { status: res.status }) };
+  try {
+    localStorage.setItem(ADMIN_TOKEN_KEY, d.token);
+  } catch {
+    return { ok: false, error: t('login.storageBlocked') };
+  }
+  return { ok: true };
 }
 
 /**
@@ -121,6 +145,7 @@ async function boot(): Promise<void> {
     showError('');
     const password = pw.value.trim();
     if (password.length < 6) return showError(t('login.tooShort'));
+    if (!isSet && new TextEncoder().encode(password).length > 128) return showError(t('login.tooLong'));
     inFlight = true;
     submit.disabled = true;
     try {
@@ -128,14 +153,16 @@ async function boot(): Promise<void> {
       if (!isSet) {
         if (password !== confirm.value.trim()) return showError(t('login.mismatch'));
         const r = await setup(password);
-        if (!r.ok) return showError(r.error || t('login.setupFailed'));
-        if (await login(password)) window.location.href = redirect;
-        else showError(t('login.invalid'));
+        if (!r.ok) return showError(r.error);
+        const l = await login(password);
+        if (l.ok) window.location.href = redirect;
+        else showError(l.error);
         return;
       }
-      if (await login(password)) window.location.href = redirect;
+      const l = await login(password);
+      if (l.ok) window.location.href = redirect;
       else {
-        showError(t('login.invalid'));
+        showError(l.error);
         pw.select();
       }
     } finally {

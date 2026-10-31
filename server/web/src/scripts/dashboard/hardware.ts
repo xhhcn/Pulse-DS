@@ -1,8 +1,8 @@
 /** Hardware tab + issue list + system summary for the detail dialog. */
-import { esc, attr } from '../core/dom';
+import { esc, attr, sepsHtml, sepsText } from '../core/dom';
 import { bytes, bytesDecimal, cleanCpuModel, cpuTopology, hours, int, linkSpeed, num, speedMB, temp, timeHMS } from '../core/format';
 import { icon } from '../core/icons';
-import { getLang, t } from '../core/i18n';
+import { getLang, t, tn } from '../core/i18n';
 import { fillClass } from './row';
 import type { Server } from './state';
 
@@ -57,31 +57,32 @@ function ghz(mhz: number): string {
 }
 
 /**
- * CPU card: [model line, "4 cores · 8 threads · 3.5 GHz"]. Turbo clock,
- * cache and live frequency live in the hardware tab's summary section.
+ * CPU card: the model line and its topology parts ("4 cores", "8 threads",
+ * "3.50 GHz"). Turbo clock, cache and live frequency live in the hardware
+ * tab's summary section.
  */
-export function cpuSummary(s: Server): { model: string; topo: string; base: number; max: number } {
+export function cpuSummary(s: Server): { model: string; topo: string[]; base: number; max: number } {
   const c = s.hardware?.cpu;
   const raw = String(c?.model || s.cpuModel || '');
   const baseM = raw.match(/@\s*([\d.]+)\s*GHz/i);
   const base = baseM ? Number(baseM[1]) * 1000 : 0;
   const max = Number(c?.max_mhz) || 0;
-  if (!c) return { model: cleanCpuModel(raw, false) || '—', topo: '', base, max };
+  if (!c) return { model: cleanCpuModel(raw, false) || '—', topo: [], base, max };
   const parts: string[] = [];
   if (c.sockets > 1) parts.push(t('detail.sockets', { n: c.sockets }));
-  if (c.cores) parts.push(t('detail.cores', { n: c.cores }));
-  if (c.threads) parts.push(t('detail.threads', { n: c.threads }));
+  if (c.cores) parts.push(tn('detail.cores', c.cores));
+  if (c.threads) parts.push(tn('detail.threads', c.threads));
   // Base clock from the model string ("@ 3.50GHz"); the live frequency is
   // skipped on purpose (an idle box reads 0.8 GHz and only confuses).
   if (base) parts.push(ghz(base));
   else if (max) parts.push(ghz(max));
-  return { model: cleanCpuModel(raw, true) || '—', topo: parts.join(' · '), base, max };
+  return { model: cleanCpuModel(raw, true) || '—', topo: parts, base, max };
 }
 
-/** Memory card: one line describing the installed modules, '' when unknown. */
-export function memorySummary(s: Server): string {
+/** Memory card: the parts of a line describing the installed modules, none when unknown. */
+export function memorySummary(s: Server): string[] {
   const m = s.hardware?.memory;
-  if (!m) return '';
+  if (!m) return [];
   const dimms: any[] = Array.isArray(m.dimms) ? m.dimms : [];
   const bits: string[] = [];
   if (dimms.length) {
@@ -92,7 +93,7 @@ export function memorySummary(s: Server): string {
     bits.push(`${dimms.length} × ${type}${clock ? `-${clock}` : ''}`.trim());
   }
   bits.push(m.ecc_supported || dimms.some((d) => d.ecc) ? t('detail.eccYes') : t('detail.eccNo'));
-  return bits.join(' · ');
+  return bits;
 }
 
 // Drive types as vendors write them ("NVMe", not "NVME"); anything else is
@@ -103,10 +104,10 @@ function diskType(v: unknown): string {
   return DISK_TYPE[raw.toLowerCase()] || raw.toUpperCase();
 }
 
-/** Disk card: "1 × SSD · 1.9 TB · S.M.A.R.T. OK", '' when unknown. */
-export function diskSummary(s: Server): string {
+/** Disk card: the parts of "1 × SSD · 1.9 TB · S.M.A.R.T. OK", none when unknown. */
+export function diskSummary(s: Server): string[] {
   const disks: any[] = Array.isArray(s.hardware?.disks) ? s.hardware.disks : [];
-  if (!disks.length) return '';
+  if (!disks.length) return [];
   const kinds = new Map<string, number>();
   let total = 0;
   let failed = 0;
@@ -119,20 +120,18 @@ export function diskSummary(s: Server): string {
   const kind = Array.from(kinds.entries()).map(([k, n]) => `${n} × ${k}`).join(', ');
   const parts = [kind, total ? bytesDecimal(total) : ''];
   parts.push(failed ? t('detail.smartFailed', { n: failed }) : disks.some((d) => d.smart_status === 'passed') ? t('detail.smartOk') : '');
-  return parts.filter(Boolean).join(' · ');
+  return parts.filter(Boolean);
 }
 
-/** Network card: "eno1 1 Gbps up · eno2 down". */
-export function nicSummary(s: Server): string {
+/** Network card: one part per interface ("eno1 1 Gbps up", "eno2 down"). */
+export function nicSummary(s: Server): string[] {
   const nics: any[] = Array.isArray(s.hardware?.network) ? s.hardware.network : [];
-  return nics
-    .map((n) => {
-      const up = n.oper_state === 'up';
-      const link = up && Number(n.speed_mbps) > 0 ? ` ${linkSpeed(n.speed_mbps)}` : '';
-      const state = up ? t('detail.linkUp') : n.admin_state === 'down' ? t('detail.linkDisabled') : n.oper_state === 'unknown' || !n.oper_state ? t('detail.linkUnknown') : t('detail.linkDown');
-      return `${n.name}${link} ${state}`;
-    })
-    .join(' · ');
+  return nics.map((n) => {
+    const up = n.oper_state === 'up';
+    const link = up && Number(n.speed_mbps) > 0 ? ` ${linkSpeed(n.speed_mbps)}` : '';
+    const state = up ? t('detail.linkUp') : n.admin_state === 'down' ? t('detail.linkDisabled') : n.oper_state === 'unknown' || !n.oper_state ? t('detail.linkUnknown') : t('detail.linkDown');
+    return `${n.name}${link} ${state}`;
+  });
 }
 
 /** Compact per-interface rows for the overview network card. */
@@ -203,8 +202,7 @@ export function systemRows(s: Server): Array<[string, string]> {
     // Show the cleaned model plus the topology the agent appended, instead of
     // the raw string.
     const topo = cpuTopology(s.cpuModel);
-    const parts = [cleanCpuModel(s.cpuModel, false), topo.cores ? t('detail.cores', { n: topo.cores }) : '', topo.threads ? t('detail.threads', { n: topo.threads }) : ''].filter(Boolean);
-    rows.push([t('detail.cpu'), esc(parts.join(' · '))]);
+    rows.push([t('detail.cpu'), sepsText([cleanCpuModel(s.cpuModel, false), topo.cores ? tn('detail.cores', topo.cores) : '', topo.threads ? tn('detail.threads', topo.threads) : ''])]);
   }
   if (!s.hasHw) {
     const k = kernelRow(s);
@@ -321,7 +319,7 @@ function renderVolts(all: any[], open: Set<string>): string {
   if (!volts.length) return '';
   const bad = volts.filter((s) => s.status && s.status !== 'ok').length;
   const isOpen = bad > 0 || open.has('volt');
-  const summary = bad ? t('hw.sensor.voltBad', { n: volts.length, bad }) : t('hw.sensor.voltOk', { n: volts.length });
+  const summary = bad ? tn('hw.sensor.voltBad', volts.length, { bad }) : tn('hw.sensor.voltOk', volts.length);
   const head = `<span class="sensor-group-sum${bad ? ' is-warn' : ''}">${esc(summary)}</span>${bad ? '' : sensorToggle('volt', isOpen, isOpen ? t('hw.sensor.less') : t('hw.sensor.show'))}`;
   return sensorGroup('volt', head, isOpen ? volts.map((s) => sensorChip(s, sensorLabel(s))) : []);
 }
@@ -363,9 +361,9 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
     if (cs.model && cs.model !== '—') rows.push([t('hw.col.model'), esc(cs.model)]);
     const topo: string[] = [];
     if (c?.sockets > 1) topo.push(t('detail.sockets', { n: c.sockets }));
-    if (c?.cores) topo.push(t('detail.cores', { n: c.cores }));
-    if (c?.threads) topo.push(t('detail.threads', { n: c.threads }));
-    if (topo.length) rows.push([t('hw.topology'), esc(topo.join(' · '))]);
+    if (c?.cores) topo.push(tn('detail.cores', c.cores));
+    if (c?.threads) topo.push(tn('detail.threads', c.threads));
+    if (topo.length) rows.push([t('hw.topology'), sepsText(topo)]);
     // A base clock is only worth a row when it differs from the maximum:
     // platforms without a separate base rating (ARM boards, AMD under
     // cpufreq) report the same figure for both.
@@ -409,7 +407,7 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
         esc(d.type || '—'),
         ...(withSpeed
           ? [
-              `${d.speed_mts ? `${int(d.speed_mts)} MT/s` : '—'}${d.speed_nominal ? ` <span class="t-3">(${esc(t('hw.nominal'))})</span>` : ''}${d.configured_mts && d.configured_mts !== d.speed_mts ? ` <span class="t-3">(${esc(t('hw.configured', { v: `${int(d.configured_mts)} MT/s` }))})</span>` : ''}`,
+              `${d.speed_mts ? `${int(d.speed_mts)} MT/s` : '—'}${d.speed_nominal ? ` <span class="t-3">${esc(t('hw.nominal'))}</span>` : ''}${d.configured_mts && d.configured_mts !== d.speed_mts ? ` <span class="t-3">${esc(t('hw.configured', { v: `${int(d.configured_mts)} MT/s` }))}</span>` : ''}`,
             ]
           : []),
         esc(d.manufacturer || '—'),
@@ -516,7 +514,7 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
     raidRows.push([
       `<span class="font-semibold mono">${esc(z.name)}</span>`,
       'ZFS',
-      z.errors ? `<span class="text-[var(--warn)]">${int(z.errors)} err</span>` : '0 err',
+      z.errors ? `<span class="text-[var(--warn)]">${esc(tn('hw.zfsErrors', Number(z.errors), { n: int(z.errors) }))}</span>` : esc(tn('hw.zfsErrors', 0)),
       pill(ok ? 'ok' : 'crit', z.state || '—'),
     ]);
   });
@@ -532,7 +530,7 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
       const recent = Number(n.err_recent) || 0;
       return [
         `<span class="font-semibold mono">${esc(n.name)}</span>`,
-        `${esc(linkSpeed(n.speed_mbps))}${n.duplex && n.duplex !== 'unknown' ? ` <span class="t-3">${esc(n.duplex)}</span>` : ''}`,
+        `${esc(linkSpeed(n.speed_mbps))}${n.duplex && n.duplex !== 'unknown' ? ` <span class="t-3">${esc(n.duplex === 'full' ? t('hw.duplexFull') : n.duplex === 'half' ? t('hw.duplexHalf') : n.duplex)}</span>` : ''}`,
         up
           ? pill('ok', t('hw.up'))
           : n.admin_state === 'down'
@@ -586,8 +584,8 @@ export function renderHardware(s: Server, open: Set<string> = new Set()): string
     if (sy.board && sy.board !== sy.product) rows.push([t('detail.board'), esc(sy.board)]);
     if (sy.bios) rows.push([t('hw.firmware'), esc(sy.bios)]);
     if (Array.isArray(sy.display_adapters) && sy.display_adapters.length) {
-      const names = sy.display_adapters.map((n: string) => (/aspeed|matrox/i.test(n) ? `${esc(n)} <span class="t-3">(${esc(t('hw.onboard'))})</span>` : esc(n)));
-      rows.push([t('hw.graphics'), names.join(' · ')]);
+      const names = sy.display_adapters.map((n: string) => (/aspeed|matrox/i.test(n) ? `${esc(n)} <span class="t-3">${esc(t('hw.onboard'))}</span>` : esc(n)));
+      rows.push([t('hw.graphics'), sepsHtml(names)]);
     }
     const k = kernelRow(s);
     if (k) rows.push(k);

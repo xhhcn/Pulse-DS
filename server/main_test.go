@@ -1,7 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -192,6 +197,50 @@ func TestExtractCountryKeepsWholeNames(t *testing.T) {
 	for in, want := range cases {
 		if got := extractCountry(in); got != want {
 			t.Errorf("extractCountry(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Four wrong passwords are just wrong; the fifth locks the client out and
+// says so (429 with the wait), and while the lock holds even the right
+// password gets the same answer.
+func TestLoginLockoutSaysHowLongToWait(t *testing.T) {
+	resetTrustedProxiesForTest(t, "")
+	store := newTestStore(t)
+	if err := store.SetPassword("correct-horse-2026"); err != nil {
+		t.Fatal(err)
+	}
+	try := func(pw string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(fmt.Sprintf(`{"password":%q}`, pw)))
+		req.RemoteAddr = "192.0.2.45:5555"
+		rec := httptest.NewRecorder()
+		handleAuthLogin(store, rec, req)
+		return rec
+	}
+	t.Cleanup(func() {
+		loginAttemptsMu.Lock()
+		delete(loginAttempts, "192.0.2.45")
+		loginAttemptsMu.Unlock()
+	})
+	for i := 1; i <= 4; i++ {
+		if rec := try(fmt.Sprintf("wrong-password-%d", i)); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("wrong password %d: status %d, want 401", i, rec.Code)
+		}
+	}
+	for _, pw := range []string{"wrong-password-5", "correct-horse-2026"} {
+		rec := try(pw)
+		if rec.Code != http.StatusTooManyRequests {
+			t.Fatalf("%s while locked: status %d, want 429", pw, rec.Code)
+		}
+		secs, err := strconv.Atoi(rec.Header().Get("Retry-After"))
+		if err != nil || secs < 14*60 || secs > 15*60 {
+			t.Fatalf("Retry-After = %q, want about 900 seconds", rec.Header().Get("Retry-After"))
+		}
+		var body struct {
+			RetryAfter int `json:"retry_after"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.RetryAfter != secs {
+			t.Fatalf("body %q: retry_after should match the header (%d)", rec.Body.String(), secs)
 		}
 	}
 }

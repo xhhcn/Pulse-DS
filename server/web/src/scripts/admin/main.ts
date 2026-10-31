@@ -3,9 +3,9 @@
  * add / edit / delete, settings dialog (general, display, privacy, tcping),
  * password change, backup download.
  */
-import { applyI18n, getLang, t } from '../core/i18n';
+import { applyI18n, getLang, t, tn } from '../core/i18n';
 import { attr, copyText, esc, flashCopied } from '../core/dom';
-import { HttpError, SSEClient, adminToken, apiBase, clearAdminToken, getJSON, redirectToLogin, sendJSON } from '../core/api';
+import { HttpError, SSEClient, adminToken, apiBase, clearAdminToken, errorText, getJSON, redirectToLogin, sendJSON } from '../core/api';
 import { hydrateRemoteIcons, icon } from '../core/icons';
 import { bytes, cleanCpuModel, cpuTopology, dateTime } from '../core/format';
 import { Modal } from '../core/modal';
@@ -38,8 +38,7 @@ function fail(err: unknown, key: string): void {
     redirectToLogin('/admin');
     return;
   }
-  const msg = err instanceof Error ? err.message : String(err);
-  toast(t(key, { msg }), 'err', 5000);
+  toast(t(key, { msg: errorText(err) }), 'err', 5000);
 }
 
 /* ------------------------------------------------------------------ */
@@ -131,7 +130,9 @@ function renderRowHtml(s: any): string {
   const hasAgent = !!(s.os || s.ipv4 || s.ipv6 || s.cpu_model || (s.time && !/^0+\s*[a-z]*$/i.test(String(s.time)))); // '0h' is what a host that never reported carries
   const online = s.alert !== true && hasAgent;
   const badges: string[] = [];
-  if (s.virtualization_type) badges.push(`<span class="pill pill-sm pill-neutral">${esc(s.virtualization_type)}</span>`);
+  // The short form the dashboard's totals use: a list row has less room than the dialog.
+  const type = s.virtualization_type === 'DS' ? t('admin.type.DS') : s.virtualization_type === 'VPS' ? t('detail.type.VPS') : s.virtualization_type;
+  if (type) badges.push(`<span class="pill pill-sm pill-neutral">${esc(type)}</span>`);
   if (s.hide_on_home === true) badges.push(`<span class="pill pill-sm pill-neutral" title="${attr(t('admin.hiddenHome'))}">${icon('eye-off', 11)}<span>${esc(t('admin.hiddenHome'))}</span></span>`);
   if (s.hide_tcping === true) badges.push(`<span class="pill pill-sm pill-neutral" title="${attr(t('admin.tcpingOff'))}">${icon('radio', 11)}<span>${esc(t('admin.tcpingOff'))}</span></span>`);
   if (!hasAgent) badges.push(`<span class="pill pill-sm pill-warn">${esc(t('admin.noAgent'))}</span>`);
@@ -140,19 +141,20 @@ function renderRowHtml(s: any): string {
   const subParts = [
     s.os || '',
     s.cpu_model ? cleanCpuModel(s.cpu_model, true) : '',
-    topo.cores ? t('detail.cores', { n: topo.cores }) : '',
-    topo.threads ? t('detail.threads', { n: topo.threads }) : '',
+    topo.cores ? tn('detail.cores', topo.cores) : '',
+    topo.threads ? tn('detail.threads', topo.threads) : '',
   ].filter(Boolean);
   const subText = subParts.join(' · ');
   // Each part stays whole; a phone breaks the line only at a separator.
   const sub = subParts.map((x) => `<span class="a-seg">${esc(x)}</span>`).join(' · ');
+  // The dot and the name never part: a long name is cut short instead of
+  // dropping below its dot; the id and the chips wrap after them.
   return `
 <div class="admin-row" draggable="true" data-id="${attr(s.id)}" title="${attr(t('admin.dragHint'))}">
   <div class="a-grip drag-handle">${icon('grip', 16)}</div>
   <div class="a-main min-w-0">
     <div class="flex items-center gap-2 min-w-0 flex-wrap">
-      <span class="dot ${online ? 'dot-online' : 'dot-offline'}" style="box-shadow:none"></span>
-      <span class="font-medium text-[14px] truncate max-w-[280px]">${esc(s.name || '')}</span>
+      <span class="flex items-center gap-2 min-w-0 max-w-full"><span class="dot ${online ? 'dot-online' : 'dot-offline'}" style="box-shadow:none"></span><span class="font-medium text-[14px] truncate max-w-[280px]">${esc(s.name || '')}</span></span>
       <span class="t-3 mono">#${esc(s.id)}</span>
       ${badges.join('')}
     </div>
@@ -161,8 +163,8 @@ function renderRowHtml(s: any): string {
   </div>
   <div class="a-net flex flex-col gap-1 min-w-0">${ipRow('IPv4', s.ipv4 || '')}${ipRow('IPv6', s.ipv6 || '')}</div>
   <div class="a-traffic text-[12px] tnum flex flex-col gap-1">
-    <div class="flex items-center gap-1.5"><span class="t-3">${icon('arrow-down', 11)}</span><span class="t-2">${esc(bytes(s.total_net_in_bytes || 0))}</span></div>
-    <div class="flex items-center gap-1.5"><span class="t-3">${icon('arrow-up', 11)}</span><span class="t-2">${esc(bytes(s.total_net_out_bytes || 0))}</span></div>
+    <div class="flex items-center gap-1.5"><span class="t-3">${icon('arrow-down', 11)}</span><span class="${hasAgent ? 't-2' : 't-3'}">${hasAgent ? esc(bytes(s.total_net_in_bytes || 0)) : '—'}</span></div>
+    <div class="flex items-center gap-1.5"><span class="t-3">${icon('arrow-up', 11)}</span><span class="${hasAgent ? 't-2' : 't-3'}">${hasAgent ? esc(bytes(s.total_net_out_bytes || 0)) : '—'}</span></div>
   </div>
   <div class="a-actions flex items-center gap-0.5">
     <button type="button" class="icon-btn info" data-act="edit" title="${attr(t('admin.edit'))}">${icon('pencil', 15)}</button>
@@ -179,7 +181,7 @@ function paint(): void {
   const sub = document.getElementById('admin-subtitle');
   // The drag hint only makes sense with something to reorder and a pointer to drag with.
   const canDrag = systems.length > 1 && !window.matchMedia('(pointer: coarse)').matches;
-  if (sub) sub.textContent = t(canDrag ? 'admin.subtitle' : 'admin.subtitleTouch', { n: systems.length });
+  if (sub) sub.textContent = tn(canDrag ? 'admin.subtitle' : 'admin.subtitleTouch', systems.length);
   if (!systems.length) {
     rows.clear();
     list.innerHTML = `<div class="py-16 text-center"><div class="inline-flex w-11 h-11 items-center justify-center rounded-xl subcard mb-3 t-3">${icon('server', 20)}</div><div class="text-[14px] font-semibold">${esc(t('admin.empty.title'))}</div><div class="text-[12px] t-3 mt-1">${esc(t('admin.empty.desc'))}</div></div>`;
@@ -246,7 +248,7 @@ async function loadOnce(): Promise<void> {
       return;
     }
     if (!rendered) {
-      list.innerHTML = `<div class="py-12 text-center text-[13px] text-[var(--crit)]">${esc(t('admin.loadFailed'))}<div class="t-3 text-[12px] mt-1">${esc(err instanceof Error ? err.message : String(err))}</div></div>`;
+      list.innerHTML = `<div class="py-12 text-center text-[13px] text-[var(--crit)]">${esc(t('admin.loadFailed'))}<div class="t-3 text-[12px] mt-1">${esc(errorText(err))}</div></div>`;
       firstListDone();
     }
   }
@@ -408,23 +410,54 @@ function showError(id: string, msg: string): void {
   el.hidden = !msg;
 }
 
+/**
+ * A field the form cannot go without: its border turns red and the message
+ * sits right under it, until it is edited. '' clears it.
+ */
+function fieldError(input: HTMLInputElement, msgId: string, msg: string): void {
+  const el = document.getElementById(msgId);
+  if (el) {
+    el.textContent = msg;
+    el.hidden = !msg;
+  }
+  if (msg) {
+    input.setAttribute('aria-invalid', 'true');
+    input.focus();
+  } else input.removeAttribute('aria-invalid');
+}
+
+/** Marks `input` as the one a form-level message is about, until it is edited. */
+function markInvalid(input: HTMLInputElement | null): void {
+  if (!input) return;
+  input.setAttribute('aria-invalid', 'true');
+  input.focus();
+}
+
+function clearInvalid(form: HTMLFormElement): void {
+  form.querySelectorAll('[aria-invalid]').forEach((el) => el.removeAttribute('aria-invalid'));
+}
+
 function busy(form: HTMLFormElement, on: boolean): void {
   form.querySelectorAll<HTMLButtonElement>('button[type=submit]').forEach((b) => (b.disabled = on));
 }
 
 function setupAdd(): void {
   const form = document.getElementById('add-form') as HTMLFormElement;
+  const nameInput = form.elements.namedItem('name') as HTMLInputElement;
   const m = modals.add;
   document.getElementById('add-btn')?.addEventListener('click', () => {
     form.reset();
     showError('add-error', '');
+    fieldError(nameInput, 'add-name-error', '');
     m.open();
   });
+  nameInput.addEventListener('input', () => fieldError(nameInput, 'add-name-error', ''));
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const name = (form.elements.namedItem('name') as HTMLInputElement).value.trim();
+    showError('add-error', '');
+    const name = nameInput.value.trim();
     if (!name) {
-      showError('add-error', t('admin.form.nameRequired'));
+      fieldError(nameInput, 'add-name-error', t('admin.form.nameRequired'));
       return;
     }
     busy(form, true);
@@ -454,7 +487,7 @@ function setupAdd(): void {
       await loadOnce();
     } catch (err) {
       if (err instanceof HttpError && err.status === 401) return redirectToLogin('/admin');
-      showError('add-error', t('admin.form.addFailed', { msg: err instanceof Error ? err.message : String(err) }));
+      showError('add-error', t('admin.form.addFailed', { msg: errorText(err) }));
     } finally {
       busy(form, false);
     }
@@ -471,18 +504,23 @@ function openEdit(s: any): void {
   const idLabel = document.getElementById('edit-id-label');
   if (idLabel) idLabel.textContent = `ID ${s.id}`;
   showError('edit-error', '');
+  fieldError(form.elements.namedItem('name') as HTMLInputElement, 'edit-name-error', '');
   modals.edit.open();
 }
 
 function setupEdit(): void {
   const form = document.getElementById('edit-form') as HTMLFormElement;
+  const nameInput = form.elements.namedItem('name') as HTMLInputElement;
+  nameInput.addEventListener('input', () => fieldError(nameInput, 'edit-name-error', ''));
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    showError('edit-error', '');
     const id = (form.elements.namedItem('id') as HTMLInputElement).value.trim();
-    const name = (form.elements.namedItem('name') as HTMLInputElement).value.trim();
+    const name = nameInput.value.trim();
     const tagsRaw = (form.elements.namedItem('tags') as HTMLInputElement).value;
-    if (!id || !name) {
-      showError('edit-error', t('admin.form.nameRequired'));
+    if (!id) return;
+    if (!name) {
+      fieldError(nameInput, 'edit-name-error', t('admin.form.nameRequired'));
       return;
     }
     const tags = tagsRaw.split(',').map((x) => x.trim()).filter(Boolean);
@@ -507,7 +545,7 @@ function setupEdit(): void {
       await loadOnce();
     } catch (err) {
       if (err instanceof HttpError && err.status === 401) return redirectToLogin('/admin');
-      showError('edit-error', t('admin.form.updateFailed', { msg: err instanceof Error ? err.message : String(err) }));
+      showError('edit-error', t('admin.form.updateFailed', { msg: errorText(err) }));
     } finally {
       busy(form, false);
     }
@@ -565,6 +603,7 @@ function showSTab(tab: STab): void {
   document.querySelectorAll<HTMLElement>('[data-stab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.stab === tab)));
   document.querySelectorAll<HTMLElement>('[data-spanel]').forEach((p) => (p.hidden = p.dataset.spanel !== tab));
   showError('settings-error', '');
+  document.querySelectorAll('#settings-modal [aria-invalid]').forEach((el) => el.removeAttribute('aria-invalid'));
 }
 
 function randomToken(len: number, chars: string): string {
@@ -587,11 +626,26 @@ function targetRow(target: { name: string; address: string } = { name: '', addre
   return div;
 }
 
+/** Share links only matter in privacy mode: off, no new link can be made and the
+ *  panel says why. A link that exists can still be copied or revoked. */
+function syncShareEnabled(): void {
+  const on = $('s-privacy').checked;
+  (document.getElementById('s-share-new') as HTMLFieldSetElement).disabled = !on;
+  (document.getElementById('s-share-off') as HTMLElement).hidden = on;
+  // A resting field is not wrong: drop its mark and the message that came with it.
+  if (!on && $('s-share-hours').hasAttribute('aria-invalid')) {
+    $('s-share-hours').removeAttribute('aria-invalid');
+    showError('settings-error', '');
+  }
+}
+
 function renderShareState(cfg: any): void {
   const wrap = document.getElementById('s-share-current') as HTMLElement;
   const link = $('s-share-link');
   const exp = document.getElementById('s-share-expires') as HTMLElement;
   const token = cfg.share_token || '';
+  // Nothing to revoke until there is a link.
+  (document.getElementById('s-share-revoke') as HTMLElement).hidden = !token;
   if (!token) {
     wrap.hidden = true;
     link.value = '';
@@ -655,7 +709,7 @@ function fillSettings([nav, priv, tcp]: SettingsData): void {
   $('s-code').value = code;
 
   $('s-privacy').checked = privacyCfg.enabled === true;
-  (document.getElementById('s-share') as HTMLElement).style.opacity = privacyCfg.enabled ? '1' : '0.55';
+  syncShareEnabled();
   $('s-share-hours').value = String(Math.max(1, Math.round((Number(privacyCfg.expires_in_seconds) || 3600) / 3600)));
   renderShareState(privacyCfg);
 
@@ -750,7 +804,7 @@ async function saveSettings(): Promise<void> {
     }
   } catch (err) {
     if (err instanceof HttpError && err.status === 401) return redirectToLogin('/admin');
-    showError('settings-error', t('settings.saveFailed', { msg: err instanceof Error ? err.message : String(err) }));
+    showError('settings-error', t('settings.saveFailed', { msg: errorText(err) }));
   } finally {
     btn.disabled = false;
     btn.textContent = label;
@@ -799,21 +853,23 @@ function setupSettings(): void {
     note.hidden = false;
   });
 
-  $('s-privacy').addEventListener('change', () => {
-    (document.getElementById('s-share') as HTMLElement).style.opacity = $('s-privacy').checked ? '1' : '0.55';
-  });
+  $('s-privacy').addEventListener('change', syncShareEnabled);
+  $('s-share-hours').addEventListener('input', () => $('s-share-hours').removeAttribute('aria-invalid'));
   document.getElementById('s-share-generate')?.addEventListener('click', () => {
     const hours = parseInt($('s-share-hours').value || '1', 10);
     if (!(hours >= 1 && hours <= 720)) {
       showError('settings-error', t('privacy.invalidHours'));
+      markInvalid($('s-share-hours'));
       return;
     }
+    $('s-share-hours').removeAttribute('aria-invalid');
+    showError('settings-error', '');
     pendingShareToken = randomToken(32, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789');
     pendingShareSeconds = hours * 3600;
     const est = new Date(Date.now() + pendingShareSeconds * 1000);
     renderShareState({ share_token: pendingShareToken, token_expires: est.toISOString(), server_time: new Date().toISOString() });
     const exp = document.getElementById('s-share-expires') as HTMLElement;
-    exp.textContent = `${t('privacy.expires', { when: dateTime(est) })} ${t('privacy.estimated')}`;
+    exp.textContent = t('privacy.expiresPending', { when: dateTime(est) });
   });
   document.getElementById('s-share-revoke')?.addEventListener('click', () => {
     pendingShareToken = '';
@@ -837,19 +893,38 @@ function setupSettings(): void {
 /* ------------------------------------------------------------------ */
 function setupPassword(): void {
   const form = document.getElementById('password-form') as HTMLFormElement;
+  const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
   document.getElementById('password-btn')?.addEventListener('click', () => {
     form.reset();
+    clearInvalid(form);
     showError('password-error', '');
     modals.password.open();
   });
+  form.addEventListener('input', (e) => (e.target as HTMLElement).removeAttribute('aria-invalid'));
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const cur = (form.elements.namedItem('current') as HTMLInputElement).value.trim();
-    const nw = (form.elements.namedItem('new') as HTMLInputElement).value.trim();
-    const cf = (form.elements.namedItem('confirm') as HTMLInputElement).value.trim();
-    if (!cur || !nw || !cf) return showError('password-error', t('password.fill'));
-    if (nw.length < 6) return showError('password-error', t('password.minLength'));
-    if (nw !== cf) return showError('password-error', t('password.mismatch'));
+    clearInvalid(form);
+    showError('password-error', '');
+    const cur = field('current').value.trim();
+    const nw = field('new').value.trim();
+    const cf = field('confirm').value.trim();
+    const empty = ['current', 'new', 'confirm'].find((n) => !field(n).value.trim());
+    if (empty) {
+      markInvalid(field(empty));
+      return showError('password-error', t('password.fill'));
+    }
+    if (nw.length < 6) {
+      markInvalid(field('new'));
+      return showError('password-error', t('password.minLength'));
+    }
+    if (new TextEncoder().encode(nw).length > 128) {
+      markInvalid(field('new'));
+      return showError('password-error', t('password.tooLong'));
+    }
+    if (nw !== cf) {
+      markInvalid(field('confirm'));
+      return showError('password-error', t('password.mismatch'));
+    }
     busy(form, true);
     try {
       const res = await sendJSON('POST', '/api/auth/change-password', { currentPassword: cur, newPassword: nw });
@@ -857,11 +932,15 @@ function setupPassword(): void {
       modals.password.close();
       toast(t('password.changed'), 'ok');
     } catch (err) {
-      if (err instanceof HttpError && err.status === 401 && !/change-password/.test(String(err.body))) {
-        // Wrong current password also yields 401 from this endpoint; show inline.
-        showError('password-error', t('password.failed', { msg: err.body || err.message }));
+      // The endpoint answers a wrong current password with 401 too; an expired
+      // session is told apart by its own message.
+      if (err instanceof HttpError && err.status === 401 && /current password/i.test(err.body)) {
+        markInvalid(field('current'));
+        showError('password-error', t('password.wrongCurrent'));
+      } else if (err instanceof HttpError && err.status === 401) {
+        redirectToLogin('/admin');
       } else {
-        showError('password-error', t('password.failed', { msg: err instanceof Error ? err.message : String(err) }));
+        showError('password-error', t('password.failed', { msg: errorText(err) }));
       }
     } finally {
       busy(form, false);
@@ -880,7 +959,7 @@ function setupBackup(): void {
     try {
       const res = await fetch(apiBase() + '/api/admin/backup', { headers: { Authorization: 'Bearer ' + token } });
       if (res.status === 401) return redirectToLogin('/admin');
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      if (!res.ok) throw new HttpError(res.status, '');
       const disp = res.headers.get('Content-Disposition') || '';
       const m = disp.match(/filename=([^;]+)/);
       const pad = (n: number) => (n < 10 ? '0' + n : String(n));
@@ -897,7 +976,7 @@ function setupBackup(): void {
       a.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 30000);
     } catch (err) {
-      toast(t('admin.backupFailed', { msg: err instanceof Error ? err.message : String(err) }), 'err', 5000);
+      toast(t('admin.backupFailed', { msg: errorText(err) }), 'err', 5000);
     } finally {
       btn.disabled = false;
       btn.classList.remove('animate-pulse');

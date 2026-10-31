@@ -2,6 +2,8 @@
  * Backend access: base URL, auth (admin bearer token or share token),
  * JSON helpers and a resilient SSE client.
  */
+import { t } from './i18n';
+
 export const ADMIN_TOKEN_KEY = 'admin_auth_token';
 
 export function apiBase(): string {
@@ -43,6 +45,21 @@ export class HttpError extends Error {
     this.status = status;
     this.body = body;
   }
+}
+
+/**
+ * What to tell a person about a failed request, in the page's language: an
+ * unreachable server and the server's own trouble (5xx) in words; any other
+ * refusal keeps the server's explanation.
+ */
+export function errorText(err: unknown): string {
+  if (err instanceof HttpError) {
+    if (err.status >= 500) return t('common.serverError', { status: err.status });
+    return err.body.trim() || `HTTP ${err.status}`;
+  }
+  // fetch() rejects with a TypeError when no response came back at all.
+  if (err instanceof TypeError) return t('common.networkError');
+  return err instanceof Error ? err.message : String(err);
 }
 
 export async function getJSON<T = any>(path: string): Promise<T> {
@@ -101,12 +118,14 @@ export class SSEClient {
   private closed = false;
   private paused = false;
   private watchingVisibility = false;
+  private watchingNetwork = false;
   constructor(private opts: SSEOptions) {}
 
   connect(): void {
     this.closed = false;
     this.paused = false;
     this.watchVisibility();
+    this.watchNetwork();
     if (this.reconnectTimer) { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     this.teardown();
     let url = apiBase() + '/api/events';
@@ -165,6 +184,29 @@ export class SSEClient {
         this.attempt = 0;
         this.connect();
       }
+    });
+  }
+
+  /**
+   * The browser knows at once when the device loses its network: say so then,
+   * instead of when the watchdog gives up, and reconnect the moment it is
+   * back. A retry stays scheduled while offline, in case the "online" event
+   * never comes (some platforms miss it).
+   */
+  private watchNetwork(): void {
+    if (this.watchingNetwork) return;
+    this.watchingNetwork = true;
+    window.addEventListener('offline', () => {
+      if (this.closed || this.paused) return;
+      this.teardown();
+      if (this.reconnectTimer) { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+      this.attempt = Math.max(this.attempt, 3);
+      this.scheduleReconnect();
+    });
+    window.addEventListener('online', () => {
+      if (this.closed || this.paused) return;
+      this.attempt = 0;
+      this.connect();
     });
   }
 

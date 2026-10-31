@@ -40,6 +40,26 @@ export function esc(v: unknown): string {
 }
 export const attr = esc;
 
+/** "8.00 GiB", "16 threads", "2 × DDR4": a number stays on the line of what follows it. */
+export function glueUnits(text: string): string {
+  return text.replace(/ × /g, '\u00a0×\u00a0').replace(/(\d) (?=\S)/g, '$1\u00a0');
+}
+
+/**
+ * A short line of parts ("8 cores · 16 threads · 3.20 GHz") that wraps
+ * between parts only, with no separator left at the end or start of a line
+ * (see .seps). `parts` are HTML; '' parts are dropped.
+ */
+export function sepsHtml(parts: string[]): string {
+  const ps = parts.filter(Boolean);
+  return ps.length ? `<span class="seps"><span>${ps.map((p) => `<span>${p}</span>`).join('')}</span></span>` : '';
+}
+
+/** sepsHtml() for plain-text parts, each with its numbers kept by their units. */
+export function sepsText(parts: string[]): string {
+  return sepsHtml(parts.filter(Boolean).map((p) => esc(glueUnits(p))));
+}
+
 export function el<T extends HTMLElement = HTMLElement>(html: string): T {
   const tpl = document.createElement('template');
   tpl.innerHTML = html.trim();

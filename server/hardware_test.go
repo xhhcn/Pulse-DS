@@ -49,7 +49,7 @@ func TestEvaluateHealthVerdicts(t *testing.T) {
 		t.Fatalf("warn box: %s %v", r.Level, r.Issues)
 	}
 	joinedWarn := strings.Join(r.Issues, "\n")
-	if !strings.Contains(joinedWarn, "eno3 链路 down") || !strings.Contains(joinedWarn, "eno4 链路 down") || strings.Contains(joinedWarn, "eno2") || strings.Contains(joinedWarn, "eno5") {
+	if !strings.Contains(joinedWarn, "eno3 链路断开") || !strings.Contains(joinedWarn, "eno4 链路断开") || strings.Contains(joinedWarn, "eno2") || strings.Contains(joinedWarn, "eno5") {
 		t.Fatalf("link-down rule: %v", r.Issues)
 	}
 	if !strings.Contains(strings.Join(r.Issues, "\n"), "剩余寿命仅 6%") {
@@ -76,7 +76,7 @@ func TestEvaluateHealthVerdicts(t *testing.T) {
 		t.Fatalf("critical count: got %d of %d", r.Critical, len(issues))
 	}
 	joined := strings.Join(issues, "\n")
-	for _, want := range []string{"FAILED", "md1 (raid5) 降级 3/4", "重建 12.5%", "不可纠正错误 2", "tank 降级", "未更新", "电源 PS2 Status: Presence detected, Failure detected", "电压 12V: 10.9 V"} {
+	for _, want := range []string{"S.M.A.R.T. 整体健康检查未通过", "md1 (raid5) 降级 3/4", "重建 12.5%", "不可纠正错误 2", "tank 降级", "未更新", "电源 PS2 Status: Presence detected, Failure detected", "电压 12V: 10.9 V"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("issue list missing %q:\n%s", want, joined)
 		}
@@ -85,7 +85,7 @@ func TestEvaluateHealthVerdicts(t *testing.T) {
 		t.Fatalf("english issue list should mirror the chinese one: %v", en)
 	}
 	// critical issues are listed before warnings
-	if !strings.Contains(issues[0], "FAILED") && !strings.Contains(issues[0], "降级") && !strings.Contains(issues[0], "不可纠正") {
+	if !strings.Contains(issues[0], "未通过") && !strings.Contains(issues[0], "降级") && !strings.Contains(issues[0], "不可纠正") {
 		t.Fatalf("critical issues must come first, got %q", issues[0])
 	}
 }

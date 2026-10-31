@@ -12,7 +12,7 @@
  * /api/tcping/history (last 24 h), fetched as the pointer heads for the tab
  * and again whenever a new sample lands.
  */
-import { esc, attr } from '../core/dom';
+import { esc, attr, sepsHtml } from '../core/dom';
 import { getJSON } from '../core/api';
 import { dateTime, timeHM } from '../core/format';
 import { t } from '../core/i18n';
@@ -115,9 +115,9 @@ export function latestLatencyHtml(s: Server): string {
     if (!v) continue;
     const lat = Number(v.latency);
     const ok = Number.isFinite(lat) && lat > 0 && lat <= LOSS_MS;
-    parts.push(`<span class="lat-part">${esc(targetName(addr))}\u00a0${ok ? fmtMs(lat).replace(' ', '\u00a0') : esc(t('tcping.timeout'))}</span>`);
+    parts.push(`${esc(targetName(addr))}\u00a0${ok ? fmtMs(lat).replace(' ', '\u00a0') : esc(t('tcping.timeout'))}`);
   }
-  return parts.join(' · ');
+  return sepsHtml(parts);
 }
 
 /* ------------------------------------------------------------------ */

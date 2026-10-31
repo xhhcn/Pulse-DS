@@ -2,9 +2,9 @@
  * Public dashboard controller: auth gate, SSE stream, list reconciliation,
  * filters / sort / search, stat tiles and the detail dialog.
  */
-import { applyI18n, getLang, t } from '../core/i18n';
-import { copyText, debounce, esc, flashCopied } from '../core/dom';
-import { HttpError, SSEClient, adminToken, apiBase, getJSON, navbarConfig, redirectToLogin, shareToken } from '../core/api';
+import { applyI18n, getLang, t, tn } from '../core/i18n';
+import { copyText, debounce, esc, flashCopied, sepsText } from '../core/dom';
+import { HttpError, SSEClient, adminToken, apiBase, errorText, getJSON, navbarConfig, redirectToLogin, shareToken } from '../core/api';
 import { hydrateRemoteIcons, icon } from '../core/icons';
 import { DetailDialog, idFromHash } from './detail';
 import { renderRow, patchRow } from './row';
@@ -96,6 +96,7 @@ function revealPage(): void {
   const gateEl = document.getElementById('gate');
   const page = document.getElementById('page');
   if (page) page.hidden = false;
+  fitSearchPlaceholder();
   if (gateEl) {
     gateEl.style.pointerEvents = 'none';
     gateEl.style.opacity = '0';
@@ -112,10 +113,6 @@ function computeView(): void {
   state.view = sortServers(filtered, state.sort, state.dir);
 }
 
-// "10 台独服 · 1 台等待探针" may wrap on a phone, but only between parts:
-// a non-breaking space keeps each count with its noun ("1" never ends a line).
-const keepParts = (s: string) => s.split(' · ').map((x) => x.replace(/ /g, '\u00a0')).join(' · ');
-
 function renderStats(): void {
   const total = state.all.length;
   const online = state.all.filter((s) => s.online).length;
@@ -131,23 +128,27 @@ function renderStats(): void {
     e.textContent = v;
     if (k.endsWith('-sub')) e.title = v;
   };
+  // "独服 14 台 · VPS 3 台 · 等待探针 1 台" may wrap on a phone, but only
+  // between parts and with no separator left at a line end (see .seps).
+  const setParts = (k: string, parts: string[]) => {
+    const e = document.querySelector<HTMLElement>(`[data-stat="${k}"]`);
+    const text = parts.filter(Boolean).join(' · ');
+    if (!e || e.getAttribute('data-text') === text) return;
+    e.setAttribute('data-text', text);
+    e.innerHTML = sepsText(parts);
+    e.title = text;
+  };
   set('total', String(total));
   // The parts add up to the total: hosts still waiting for their agent have no
   // type yet, and an agent may report a type that is neither DS nor VPS.
   const pending = state.all.filter((s) => !s.reported && s.type !== 'DS' && s.type !== 'VPS').length;
   const other = total - ds - vps - pending;
-  set(
-    'total-sub',
-    [
-      ds ? t('dash.stat.dsCount', { n: ds }) : '',
-      vps ? t('dash.stat.vpsCount', { n: vps }) : '',
-      other > 0 ? t('dash.stat.otherCount', { n: other }) : '',
-      pending ? t('dash.stat.pendingCount', { n: pending }) : '',
-    ]
-      .filter(Boolean)
-      .map(keepParts)
-      .join(' · '),
-  );
+  setParts('total-sub', [
+    ds ? t('dash.stat.dsCount', { n: ds }) : '',
+    vps ? t('dash.stat.vpsCount', { n: vps }) : '',
+    other > 0 ? t('dash.stat.otherCount', { n: other }) : '',
+    pending ? t('dash.stat.pendingCount', { n: pending }) : '',
+  ]);
   set('online', String(online));
   set('online-sub', total ? `${Math.round((online / Math.max(1, total)) * 100)}%` : '');
   set('offline', String(offline));
@@ -155,7 +156,7 @@ function renderStats(): void {
   const sep = getLang() === 'zh' ? '、' : ', ';
   set('offline-sub', offNames.length ? (offNames.length <= 2 ? offNames.join(sep) : `${offNames[0]} +${offNames.length - 1}`) : '');
   set('attention', String(crit + warn));
-  set('attention-sub', keepParts(crit + warn ? t('dash.stat.attentionSub', { crit, warn }) : withHw ? t('dash.stat.allGood') : t('dash.stat.noHardware')));
+  setParts('attention-sub', (crit + warn ? tn('dash.stat.attentionSub', warn, { crit, warn }) : withHw ? t('dash.stat.allGood') : t('dash.stat.noHardware')).split(' · '));
   document.querySelector<HTMLElement>('[data-stat="offline"]')?.classList.toggle('is-nonzero', offline > 0);
   const attVal = document.querySelector<HTMLElement>('[data-stat="attention"]');
   if (attVal) attVal.classList.toggle('is-nonzero', crit + warn > 0);
@@ -303,7 +304,7 @@ async function loadOnce(): Promise<void> {
       return;
     }
     if (!state.rendered) {
-      body.innerHTML = emptyHtml('error', err instanceof Error ? err.message : String(err));
+      body.innerHTML = emptyHtml('error', errorText(err));
       firstSnapshotDone();
     }
   }
@@ -450,12 +451,37 @@ function updateSortLabel(): void {
     dirIcon.hidden = state.sort === 'default';
     dirIcon.innerHTML = icon(state.dir === 'asc' ? 'arrow-up' : 'arrow-down', 12);
   }
+  // The chosen sort carries its direction; the default order has none, so it
+  // is simply ticked.
   document.querySelectorAll<HTMLElement>('[data-sort]').forEach((b) => {
     const on = b.dataset.sort === state.sort;
     b.setAttribute('aria-checked', String(on));
     const mark = b.querySelector<HTMLElement>('.mark');
-    if (mark) mark.innerHTML = on ? icon(state.dir === 'asc' ? 'arrow-up' : 'arrow-down', 13) : '';
+    if (mark) mark.innerHTML = on ? icon(state.sort === 'default' ? 'check' : state.dir === 'asc' ? 'arrow-up' : 'arrow-down', 13) : '';
   });
+  fitSearchPlaceholder();
+}
+
+let measureCtx: CanvasRenderingContext2D | null = null;
+
+/**
+ * The search field is narrower on a phone, more so when the sort button
+ * names a sort: a placeholder that no longer fits gives way to a shorter one
+ * instead of being cut off mid-word.
+ */
+function fitSearchPlaceholder(): void {
+  const input = document.getElementById('system-filter-input') as HTMLInputElement | null;
+  if (!input || !input.clientWidth) return;
+  const cs = getComputedStyle(input);
+  const room = input.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
+  measureCtx ||= document.createElement('canvas').getContext('2d');
+  const options = [t('dash.search'), t('dash.searchShort'), t('dash.searchShortest')];
+  let text = options[options.length - 1];
+  if (measureCtx) {
+    measureCtx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    text = options.find((o) => measureCtx!.measureText(o).width <= room) || text;
+  }
+  if (input.placeholder !== text) input.placeholder = text;
 }
 
 function setupControls(): void {
@@ -527,6 +553,7 @@ function setupControls(): void {
     }
   } catch {}
   updateSortLabel();
+  window.addEventListener('resize', fitSearchPlaceholder);
 
   body.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement;
