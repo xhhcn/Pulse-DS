@@ -60,7 +60,7 @@ sudo systemctl start pulse-ds-server
 
 ## Client install
 
-Add the system in `/admin` first to get its ID and secret; the copy button in the admin page gives the complete command.
+Add the system in `/admin` first: its install commands open right after adding (and later from the row's install-command button), with the ID and secret filled in, ready to copy.
 
 Linux / macOS:
 

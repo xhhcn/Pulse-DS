@@ -60,7 +60,7 @@ sudo systemctl start pulse-ds-server
 
 ## 客户端安装
 
-先在 `/admin` 添加系统，得到 ID 与 Secret；管理页的复制按钮会直接给出完整命令。
+先在 `/admin` 添加系统：添加后会直接弹出这台服务器的安装命令（之后也可以点列表里的「安装命令」按钮再打开），复制即可，ID 与密钥都已填好。
 
 Linux / macOS：
 

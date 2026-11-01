@@ -4,7 +4,7 @@
  * password change, backup download.
  */
 import { applyI18n, getLang, t, tn } from '../core/i18n';
-import { attr, copyText, esc, flashCopied } from '../core/dom';
+import { attr, copyText, esc, flashCopied, glueUnits, sepsHtml } from '../core/dom';
 import { HttpError, SSEClient, adminToken, apiBase, clearAdminToken, errorText, getJSON, redirectToLogin, sendJSON } from '../core/api';
 import { hydrateRemoteIcons, icon } from '../core/icons';
 import { bytes, cleanCpuModel, cpuTopology, dateTime } from '../core/format';
@@ -100,16 +100,19 @@ function psQuote(v: unknown): string {
   return `'${String(v ?? '').replace(/'/g, `''`)}'`;
 }
 
-function linuxCommand(s: any): string {
+// `mask` puts dots where the secret goes: the dialog shows a command without
+// putting the secret on screen, and copies the real one.
+const MASK = "'••••'";
+function linuxCommand(s: any, mask = false): string {
   const secret = s.secret || sharedSecret;
   let cmd = `curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/client/install.sh | sudo bash -s -- --id ${shellQuote(s.id)} --server ${shellQuote(window.location.origin)}`;
-  if (secret) cmd += ` --secret ${shellQuote(secret)}`;
+  if (secret) cmd += ` --secret ${mask ? MASK : shellQuote(secret)}`;
   return cmd;
 }
-function windowsCommand(s: any): string {
+function windowsCommand(s: any, mask = false): string {
   const secret = s.secret || sharedSecret;
   let cmd = `powershell -ExecutionPolicy Bypass -Command "& { \`$env:AgentId=${psQuote(s.id)}; \`$env:ServerBase=${psQuote(window.location.origin)}`;
-  if (secret) cmd += `; \`$env:Secret=${psQuote(secret)}`;
+  if (secret) cmd += `; \`$env:Secret=${mask ? MASK : psQuote(secret)}`;
   cmd += `; irm https://raw.githubusercontent.com/xhhcn/Pulse-DS/main/client/install.ps1 | iex }"`;
   return cmd;
 }
@@ -121,57 +124,71 @@ function sigOf(s: any): string {
   ]);
 }
 
+// An address with its copy button. An address too long for its line (an
+// IPv6 one, or an IPv4 one on a narrow phone) breaks only after one of its
+// colons or dots, never in the middle of a group.
 function ipRow(label: string, ip: string): string {
-  if (!ip) return `<div class="flex items-center gap-1.5 text-[12px]"><span class="t-3 w-9">${label}</span><span class="t-3">—</span></div>`;
-  return `<div class="flex items-center gap-1.5 text-[12px] min-w-0"><span class="t-3 w-9 shrink-0">${label}</span><span class="mono truncate t-1" title="${attr(ip)}">${esc(ip)}</span><button type="button" class="icon-btn icon-btn-sm shrink-0" data-copy="${attr(ip)}" title="${attr(t('admin.copyIp', { v: label }))}"><span class="i-copy">${icon('copy', 12)}</span><span class="i-check text-[var(--ok)]" hidden>${icon('check', 12)}</span></button></div>`;
+  if (!ip) return `<div class="a-ip"><span class="a-ip-label">${label}</span><span class="a-ip-val"><span class="t-3">—</span></span></div>`;
+  const shown = esc(ip).replace(/([:.])/g, '$1<wbr>');
+  const copy = t('admin.copyIp', { v: label });
+  return `<div class="a-ip"><span class="a-ip-label">${label}</span><span class="a-ip-val mono">${shown}</span><button type="button" class="icon-btn icon-btn-sm a-copy" data-copy="${attr(ip)}" title="${attr(copy)}" aria-label="${attr(copy)}"><span class="i-copy">${icon('copy', 12)}</span><span class="i-check" hidden>${icon('check', 12)}</span></button></div>`;
 }
 
+function trafficRow(dir: 'in' | 'out', hasAgent: boolean, value: number): string {
+  const label = t(dir === 'in' ? 'admin.trafficIn' : 'admin.trafficOut');
+  return `<div class="a-tr" title="${attr(label)}"><span class="t-3" aria-hidden="true">${icon(dir === 'in' ? 'arrow-down' : 'arrow-up', 11)}</span><span class="sr-only">${esc(label)}</span><span class="${hasAgent ? 't-2' : 't-3'}">${hasAgent ? esc(bytes(value || 0)) : '—'}</span></div>`;
+}
+
+/**
+ * One server as a table row: name and identity, system, addresses, traffic
+ * totals and actions on the first lines, tags underneath. The row is a grid
+ * whose areas change with the width (see .admin-row): on a tablet the system
+ * line moves under the name, on a phone the row becomes a card.
+ */
 function renderRowHtml(s: any): string {
   const hasAgent = !!(s.os || s.ipv4 || s.ipv6 || s.cpu_model || (s.time && !/^0+\s*[a-z]*$/i.test(String(s.time)))); // '0h' is what a host that never reported carries
   const online = s.alert !== true && hasAgent;
-  const badges: string[] = [];
   // The short form the dashboard's totals use: a list row has less room than the dialog.
   const type = s.virtualization_type === 'DS' ? t('admin.type.DS') : s.virtualization_type === 'VPS' ? t('detail.type.VPS') : s.virtualization_type;
-  if (type) badges.push(`<span class="pill pill-sm pill-neutral">${esc(type)}</span>`);
-  if (s.hide_on_home === true) badges.push(`<span class="pill pill-sm pill-neutral" title="${attr(t('admin.hiddenHome'))}">${icon('eye-off', 11)}<span>${esc(t('admin.hiddenHome'))}</span></span>`);
-  if (s.hide_tcping === true) badges.push(`<span class="pill pill-sm pill-neutral" title="${attr(t('admin.tcpingOff'))}">${icon('radio', 11)}<span>${esc(t('admin.tcpingOff'))}</span></span>`);
-  if (!hasAgent) badges.push(`<span class="pill pill-sm pill-warn">${esc(t('admin.noAgent'))}</span>`);
-  const tags = Array.isArray(s.tags) && s.tags.length ? `<div class="flex flex-wrap gap-1 mt-1.5">${s.tags.map((x: string) => `<span class="tag" title="${attr(x)}"><span class="tag-text">${esc(x)}</span></span>`).join('')}</div>` : '';
+  // Identity and settings in words, the one state that needs attention in its colour.
+  const meta = sepsHtml([
+    `<span class="mono">#${esc(s.id)}</span>`,
+    type ? esc(type) : '',
+    s.hide_on_home === true ? esc(t('admin.hiddenHome')) : '',
+    s.hide_tcping === true ? esc(t('admin.tcpingOff')) : '',
+    hasAgent ? '' : `<span class="text-[var(--warn)]">${esc(t('admin.noAgent'))}</span>`,
+  ]);
   const topo = cpuTopology(s.cpu_model || '');
-  const subParts = [
-    s.os || '',
-    s.cpu_model ? cleanCpuModel(s.cpu_model, true) : '',
-    topo.cores ? tn('detail.cores', topo.cores) : '',
-    topo.threads ? tn('detail.threads', topo.threads) : '',
+  // Parts as in sepsHtml(): each stays whole and no line starts or ends with
+  // a separator. On a wide screen the system name has a line of its own.
+  const sysParts = [
+    s.os ? `<span class="a-os t-2">${esc(glueUnits(String(s.os)))}</span>` : '',
+    s.cpu_model ? `<span>${esc(glueUnits(cleanCpuModel(s.cpu_model, true)))}</span>` : '',
+    topo.cores ? `<span>${esc(glueUnits(tn('detail.cores', topo.cores)))}</span>` : '',
+    topo.threads ? `<span>${esc(glueUnits(tn('detail.threads', topo.threads)))}</span>` : '',
   ].filter(Boolean);
-  const subText = subParts.join(' · ');
-  // Each part stays whole; a phone breaks the line only at a separator.
-  const sub = subParts.map((x) => `<span class="a-seg">${esc(x)}</span>`).join(' · ');
-  // The dot and the name never part: a long name is cut short instead of
-  // dropping below its dot; the id and the chips wrap after them.
+  const sys = sysParts.length ? `<span class="seps"><span>${sysParts.join('')}</span></span>` : '';
+  const tags = Array.isArray(s.tags) && s.tags.length ? `<div class="a-tags">${s.tags.map((x: string) => `<span class="tag" title="${attr(x)}"><span class="tag-text">${esc(x)}</span></span>`).join('')}</div>` : '';
+  const edit = t('admin.edit');
+  const install = t('admin.install');
+  const del = t('common.delete');
+  const drag = t('admin.dragHint');
   return `
-<div class="admin-row" draggable="true" data-id="${attr(s.id)}" title="${attr(t('admin.dragHint'))}">
-  <div class="a-grip drag-handle">${icon('grip', 16)}</div>
-  <div class="a-main min-w-0">
-    <div class="flex items-center gap-2 min-w-0 flex-wrap">
-      <span class="flex items-center gap-2 min-w-0 max-w-full"><span class="dot ${online ? 'dot-online' : 'dot-offline'}" style="box-shadow:none"></span><span class="font-medium text-[14px] truncate max-w-[280px]">${esc(s.name || '')}</span></span>
-      <span class="t-3 mono">#${esc(s.id)}</span>
-      ${badges.join('')}
-    </div>
-    ${sub ? `<div class="flex items-center gap-1.5 text-[12px] t-3 mt-1 min-w-0"><span class="a-sub truncate" title="${attr(subText)}">${sub}</span></div>` : ''}
-    ${tags}
+<div class="admin-row" role="listitem" draggable="true" data-id="${attr(s.id)}">
+  <div class="a-grip drag-handle" title="${attr(drag)}">${icon('grip', 16)}</div>
+  <div class="a-main">
+    <div class="a-title"><span class="dot ${online ? 'dot-online' : 'dot-offline'}"></span><span class="a-name">${esc(s.name || '')}</span></div>
+    <div class="a-meta">${meta}</div>
   </div>
-  <div class="a-net flex flex-col gap-1 min-w-0">${ipRow('IPv4', s.ipv4 || '')}${ipRow('IPv6', s.ipv6 || '')}</div>
-  <div class="a-traffic text-[12px] tnum flex flex-col gap-1">
-    <div class="flex items-center gap-1.5"><span class="t-3">${icon('arrow-down', 11)}</span><span class="${hasAgent ? 't-2' : 't-3'}">${hasAgent ? esc(bytes(s.total_net_in_bytes || 0)) : '—'}</span></div>
-    <div class="flex items-center gap-1.5"><span class="t-3">${icon('arrow-up', 11)}</span><span class="${hasAgent ? 't-2' : 't-3'}">${hasAgent ? esc(bytes(s.total_net_out_bytes || 0)) : '—'}</span></div>
+  <div class="a-sys${sys ? '' : ' is-empty'}">${sys || '<span class="t-3">—</span>'}</div>
+  <div class="a-net">${ipRow('IPv4', s.ipv4 || '')}${ipRow('IPv6', s.ipv6 || '')}</div>
+  <div class="a-traffic tnum">${trafficRow('in', hasAgent, s.total_net_in_bytes)}${trafficRow('out', hasAgent, s.total_net_out_bytes)}</div>
+  <div class="a-actions">
+    <button type="button" class="icon-btn" data-act="install" title="${attr(install)}" aria-label="${attr(install)}">${icon('terminal', 15)}</button>
+    <button type="button" class="icon-btn" data-act="edit" title="${attr(edit)}" aria-label="${attr(edit)}">${icon('pencil', 15)}</button>
+    <button type="button" class="icon-btn danger" data-act="delete" title="${attr(del)}" aria-label="${attr(del)}">${icon('trash', 15)}</button>
   </div>
-  <div class="a-actions flex items-center gap-0.5">
-    <button type="button" class="icon-btn info" data-act="edit" title="${attr(t('admin.edit'))}">${icon('pencil', 15)}</button>
-    <button type="button" class="icon-btn warn" data-act="linux" title="${attr(t('admin.copyLinux'))}"><span class="i-copy">${icon('linux', 15)}</span><span class="i-check text-[var(--ok)]" hidden>${icon('check', 15)}</span></button>
-    <button type="button" class="icon-btn info" data-act="windows" title="${attr(t('admin.copyWindows'))}"><span class="i-copy">${icon('windows', 15)}</span><span class="i-check text-[var(--ok)]" hidden>${icon('check', 15)}</span></button>
-    <button type="button" class="icon-btn danger" data-act="delete" title="${attr(t('common.delete'))}">${icon('trash', 15)}</button>
-  </div>
+  ${tags}
 </div>`;
 }
 
@@ -181,7 +198,10 @@ function paint(): void {
   const sub = document.getElementById('admin-subtitle');
   // The drag hint only makes sense with something to reorder and a pointer to drag with.
   const canDrag = systems.length > 1 && !window.matchMedia('(pointer: coarse)').matches;
-  if (sub) sub.textContent = tn(canDrag ? 'admin.subtitle' : 'admin.subtitleTouch', systems.length);
+  // "18 servers · drag rows to reorder" wraps between its two parts only.
+  if (sub) sub.innerHTML = sepsHtml(tn(canDrag ? 'admin.subtitle' : 'admin.subtitleTouch', systems.length).split(' · ').map(esc));
+  // Column headings only above rows.
+  document.getElementById('admin-table')?.classList.toggle('is-empty', !systems.length);
   if (!systems.length) {
     rows.clear();
     list.innerHTML = `<div class="py-16 text-center"><div class="inline-flex w-11 h-11 items-center justify-center rounded-xl subcard mb-3 t-3">${icon('server', 20)}</div><div class="text-[14px] font-semibold">${esc(t('admin.empty.title'))}</div><div class="text-[12px] t-3 mt-1">${esc(t('admin.empty.desc'))}</div></div>`;
@@ -380,23 +400,90 @@ function wireList(): void {
     const s = rowRaw(act);
     if (!s) return;
     switch (act.dataset.act) {
+      case 'install':
+        openInstall(s);
+        break;
       case 'edit':
         openEdit(s);
         break;
       case 'delete':
         openDelete(s);
         break;
-      case 'linux': {
-        const ok = await copyText(linuxCommand(s));
-        flashCopied(act, ok, t('common.copied'), t('common.copyFailed'));
-        break;
-      }
-      case 'windows': {
-        const ok = await copyText(windowsCommand(s));
-        flashCopied(act, ok, t('common.copied'), t('common.copyFailed'));
-        break;
-      }
     }
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Install commands                                                     */
+/* ------------------------------------------------------------------ */
+// The server the install dialog is showing.
+let installFor: any = null;
+const copyTimers = new WeakMap<HTMLElement, number>();
+
+/** Both commands with the secret masked, or one of them in full (`reveal`). */
+function renderInstall(reveal: '' | 'linux' | 'windows' = ''): void {
+  const s = installFor;
+  if (!s) return;
+  const hasSecret = !!(s.secret || sharedSecret);
+  (document.getElementById('install-linux') as HTMLElement).textContent = linuxCommand(s, reveal !== 'linux');
+  (document.getElementById('install-windows') as HTMLElement).textContent = windowsCommand(s, reveal !== 'windows');
+  (document.getElementById('install-secret') as HTMLElement).hidden = !hasSecret;
+  (document.getElementById('install-nosecret') as HTMLElement).hidden = hasSecret;
+}
+
+function openInstall(s: any): void {
+  installFor = s;
+  const sub = document.getElementById('install-sub');
+  if (sub) sub.textContent = `${s.name || s.id} · ID ${s.id}`;
+  showError('install-error', '');
+  renderInstall();
+  modals.install.open();
+}
+
+/** "Copy" turns into a green "Copied" with a check for a moment. */
+function markCopied(btn: HTMLElement): void {
+  const parts = ['.i-copy', '.i-check', '.cmd-copy-text'].map((q) => btn.querySelector<HTMLElement>(q));
+  const [copyIcon, checkIcon, label] = parts;
+  if (copyIcon) copyIcon.hidden = true;
+  if (checkIcon) checkIcon.hidden = false;
+  if (label) label.textContent = t('common.copied');
+  btn.classList.add('is-copied');
+  window.clearTimeout(copyTimers.get(btn));
+  copyTimers.set(
+    btn,
+    window.setTimeout(() => {
+      if (copyIcon) copyIcon.hidden = false;
+      if (checkIcon) checkIcon.hidden = true;
+      if (label) label.textContent = t('common.copy');
+      btn.classList.remove('is-copied');
+    }, 1600),
+  );
+}
+
+function setupInstall(): void {
+  const root = document.getElementById('install-modal') as HTMLElement;
+  root.querySelectorAll<HTMLButtonElement>('.cmd-copy').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const s = installFor;
+      if (!s) return;
+      const os = btn.dataset.act === 'windows' ? 'windows' : 'linux';
+      const ok = await copyText(os === 'windows' ? windowsCommand(s) : linuxCommand(s));
+      if (ok) {
+        renderInstall();
+        showError('install-error', '');
+        markCopied(btn);
+        return;
+      }
+      // No clipboard (a plain-HTTP address, a refused permission): show this
+      // command in full and select it, so it can be copied by hand.
+      renderInstall(os);
+      const range = document.createRange();
+      range.selectNodeContents(document.getElementById(`install-${os}`) as HTMLElement);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      showError('install-error', t('admin.install.copyFailed'));
+    });
   });
 }
 
@@ -471,8 +558,9 @@ function setupAdd(): void {
         const m2 = String(s.id || '').match(/\d+/);
         if (m2) max = Math.max(max, parseInt(m2[0], 10));
       });
+      const id = String(max + 1);
       await sendJSON('POST', '/api/metrics', {
-        id: String(max + 1),
+        id,
         name,
         cpu: 0,
         memory: 0,
@@ -484,7 +572,10 @@ function setupAdd(): void {
       });
       m.close();
       toast(t('admin.added'), 'ok');
-      await loadOnce();
+      // The next step is installing its agent: offer the commands as soon as
+      // the add dialog has finished closing (it hands focus back as it goes).
+      await Promise.all([loadOnce(), new Promise((resolve) => window.setTimeout(resolve, 200))]);
+      openInstall(rows.get(id)?.raw || { id, name });
     } catch (err) {
       if (err instanceof HttpError && err.status === 401) return redirectToLogin('/admin');
       showError('add-error', t('admin.form.addFailed', { msg: errorText(err) }));
@@ -894,16 +985,24 @@ function setupSettings(): void {
 function setupPassword(): void {
   const form = document.getElementById('password-form') as HTMLFormElement;
   const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
+  // The length rule is already written under the field: when it is broken,
+  // that line turns red instead of being repeated under the form.
+  const hint = document.getElementById('pw-new-hint') as HTMLElement;
   document.getElementById('password-btn')?.addEventListener('click', () => {
     form.reset();
     clearInvalid(form);
+    hint.classList.remove('is-error');
     showError('password-error', '');
     modals.password.open();
   });
-  form.addEventListener('input', (e) => (e.target as HTMLElement).removeAttribute('aria-invalid'));
+  form.addEventListener('input', (e) => {
+    (e.target as HTMLElement).removeAttribute('aria-invalid');
+    if (e.target === field('new')) hint.classList.remove('is-error');
+  });
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     clearInvalid(form);
+    hint.classList.remove('is-error');
     showError('password-error', '');
     const cur = field('current').value.trim();
     const nw = field('new').value.trim();
@@ -914,8 +1013,8 @@ function setupPassword(): void {
       return showError('password-error', t('password.fill'));
     }
     if (nw.length < 6) {
-      markInvalid(field('new'));
-      return showError('password-error', t('password.minLength'));
+      hint.classList.add('is-error');
+      return markInvalid(field('new'));
     }
     if (new TextEncoder().encode(nw).length > 128) {
       markInvalid(field('new'));
@@ -1070,7 +1169,7 @@ async function boot(): Promise<void> {
   const ok = await gate();
   if (!ok) return;
 
-  ['add', 'edit', 'delete', 'settings', 'regen', 'password'].forEach((k) => {
+  ['add', 'edit', 'delete', 'install', 'settings', 'regen', 'password'].forEach((k) => {
     modals[k] = new Modal(document.getElementById(`${k}-modal`) as HTMLElement);
   });
   wireList();
@@ -1079,6 +1178,7 @@ async function boot(): Promise<void> {
   setupAdd();
   setupEdit();
   setupDelete();
+  setupInstall();
   setupSettings();
   setupPassword();
   setupBackup();

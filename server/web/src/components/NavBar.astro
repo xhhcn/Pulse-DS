@@ -12,9 +12,7 @@ const { page = 'home', showLive = false } = Astro.props;
     <a href="/" class="flex items-center gap-2.5 min-w-0" id="brand-link">
       <span id="brand-logo" class="inline-flex w-7 h-7 items-center justify-center rounded-lg text-[var(--text)] shrink-0" aria-hidden="true">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" class="default-logo">
-          <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6.5 12h2l2-6 3 18 2.5-12h2">
-            <animate attributeName="opacity" values="0.55;1;0.55" dur="2.4s" repeatCount="indefinite" />
-          </path>
+          <path class="pulse-beat" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6.5 12h2l2-6 3 18 2.5-12h2" />
           <path stroke="currentColor" stroke-linecap="round" stroke-width="1.8" d="M2.5 12h2M19.5 12h2" opacity="0.5" />
         </svg>
       </span>

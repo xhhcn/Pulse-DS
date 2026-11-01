@@ -1,6 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 export default {
 	content: ['./src/**/*.{astro,html,js,ts,jsx,tsx}'],
+	// hover: utilities only for pointers that hover, as in global.css: a tapped
+	// link on a touch screen would otherwise stay in its hover colour.
+	future: { hoverOnlyWhenSupported: true },
 	darkMode: 'class', // Enable class-based dark mode
 	theme: {
 		extend: {

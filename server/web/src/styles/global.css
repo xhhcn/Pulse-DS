@@ -28,6 +28,12 @@
   /* Fill for white-on-red controls. The dark theme lightens --crit so red
      text reads on a dark surface, which leaves white text on it at 2.8:1. */
   --crit-solid: #dc2626;
+  /* Translucent status tints behind status-coloured text (pills, icon
+     tiles): the same in both themes, since they take the surface's shade. */
+  --ok-tint: rgba(22, 163, 74, 0.1);
+  --warn-tint: rgba(217, 119, 6, 0.12);
+  --crit-tint: rgba(220, 38, 38, 0.12);
+  --info-tint: rgba(37, 99, 235, 0.1);
 }
 
 /* Three text levels, the same lightness steps in both themes. --text-3 still
@@ -45,6 +51,7 @@ html.dark {
   --text-2: #a5a5ad;
   --text-3: #878790;
   --track: rgba(255, 255, 255, 0.09);
+  --switch-off: #3a3a3f;
   --backdrop: rgba(0, 0, 0, 0.55);
   --focus: rgba(255, 255, 255, 0.5);
   --ok: #4ade80;
@@ -70,6 +77,7 @@ html.light {
   --text-2: #52525b;
   --text-3: #6e6e78;
   --track: rgba(0, 0, 0, 0.07);
+  --switch-off: #d6d6dc;
   --backdrop: rgba(30, 30, 34, 0.4);
   --focus: rgba(0, 0, 0, 0.45);
   --selection: rgba(37, 99, 235, 0.18);
@@ -213,8 +221,12 @@ html.kb :focus-visible {
   user-select: none;
   transition: background-color 0.12s ease, border-color 0.12s ease;
 }
-.btn:hover {
-  background: var(--surface-2);
+/* Hover styles only where there is a pointer that hovers: on a touch screen a
+   tapped control would otherwise keep its hover shade until the next tap. */
+@media (hover: hover) {
+  .btn:hover {
+    background: var(--surface-2);
+  }
 }
 .btn:disabled {
   opacity: 0.5;
@@ -230,26 +242,32 @@ html.kb :focus-visible {
   border-color: var(--text);
   color: var(--bg);
 }
-.btn-primary:hover {
-  background: var(--text);
-  opacity: 0.88;
+@media (hover: hover) {
+  .btn-primary:hover {
+    background: var(--text);
+    opacity: 0.88;
+  }
 }
 .btn-danger {
   background: var(--crit-solid);
   border-color: transparent;
   color: #fff;
 }
-.btn-danger:hover {
-  background: var(--crit-solid);
-  opacity: 0.88;
+@media (hover: hover) {
+  .btn-danger:hover {
+    background: var(--crit-solid);
+    opacity: 0.88;
+  }
 }
 .btn-warn {
   border-color: var(--warn);
   color: var(--warn);
   background: transparent;
 }
-.btn-warn:hover {
-  background: rgba(217, 119, 6, 0.08);
+@media (hover: hover) {
+  .btn-warn:hover {
+    background: var(--warn-tint);
+  }
 }
 .btn-ghost {
   background: transparent;
@@ -266,19 +284,23 @@ html.kb :focus-visible {
   cursor: pointer;
   transition: background-color 0.12s ease, color 0.12s ease;
 }
-.icon-btn:hover {
-  background: var(--surface-2);
-  color: var(--text);
+@media (hover: hover) {
+  .icon-btn:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
 }
 .icon-btn-sm {
   width: 24px;
   height: 24px;
   border-radius: 6px;
 }
-.icon-btn.danger:hover { color: var(--crit); }
-.icon-btn.info:hover { color: var(--info); }
-.icon-btn.ok:hover { color: var(--ok); }
-.icon-btn.warn:hover { color: var(--warn); }
+@media (hover: hover) {
+  .icon-btn.danger:hover { color: var(--crit); }
+  .icon-btn.info:hover { color: var(--info); }
+  .icon-btn.ok:hover { color: var(--ok); }
+  .icon-btn.warn:hover { color: var(--warn); }
+}
 .is-copied,
 .is-copied .i-check { color: var(--ok); }
 
@@ -343,7 +365,8 @@ html.kb :focus-visible {
   margin-top: 6px;
   line-height: 1.5;
 }
-.field-error {
+.field-error,
+.field-hint.is-error {
   font-size: 12px;
   color: var(--crit);
 }
@@ -366,11 +389,13 @@ fieldset:disabled .field-hint {
   width: 0;
   height: 0;
 }
+/* Off, the track is a grey a step darker than any surface and the white knob
+   carries a hairline, so an off switch still reads as a switch on white. */
 .switch span {
   position: absolute;
   inset: 0;
   border-radius: 999px;
-  background: var(--surface-3);
+  background: var(--switch-off);
   transition: background-color 0.15s ease;
 }
 .switch span::after {
@@ -382,6 +407,7 @@ fieldset:disabled .field-hint {
   height: 16px;
   border-radius: 999px;
   background: #fff;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.12);
   transition: transform 0.15s ease;
 }
 .switch input:checked + span {
@@ -389,6 +415,11 @@ fieldset:disabled .field-hint {
 }
 .switch input:checked + span::after {
   transform: translateX(16px);
+}
+/* The input itself is invisible: the keyboard ring goes on the track. */
+html.kb .switch input:focus-visible + span {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 .setting-row {
   display: flex;
@@ -434,10 +465,10 @@ fieldset:disabled .field-hint {
   padding: 2px 6px;
 }
 .pill-neutral { background: var(--surface-2); }
-.pill-ok { color: var(--ok); background: rgba(22, 163, 74, 0.1); }
-.pill-warn { color: var(--warn); background: rgba(217, 119, 6, 0.12); }
-.pill-crit { color: var(--crit); background: rgba(220, 38, 38, 0.12); }
-.pill-info { color: var(--info); background: rgba(37, 99, 235, 0.1); }
+.pill-ok { color: var(--ok); background: var(--ok-tint); }
+.pill-warn { color: var(--warn); background: var(--warn-tint); }
+.pill-crit { color: var(--crit); background: var(--crit-tint); }
+.pill-info { color: var(--info); background: var(--info-tint); }
 .pill-violet { color: var(--text-2); background: var(--surface-2); }
 .pill-unknown { color: var(--text-3); background: var(--surface-2); }
 
@@ -630,8 +661,10 @@ fieldset:disabled .field-hint {
   min-width: 0;
   transition: border-color 0.12s ease, background-color 0.12s ease;
 }
-.tp-target:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .tp-target:hover {
+    background: var(--surface-2);
+  }
 }
 .tp-target[aria-pressed='true'] {
   border-color: var(--text);
@@ -797,8 +830,10 @@ fieldset:disabled .field-hint {
 .tab svg {
   display: none;
 }
-.tab:hover {
-  color: var(--text);
+@media (hover: hover) {
+  .tab:hover {
+    color: var(--text);
+  }
 }
 .tab[aria-selected='true'] {
   color: var(--text);
@@ -861,8 +896,10 @@ fieldset:disabled .field-hint {
   color: var(--text);
   cursor: pointer;
 }
-.menu-item:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .menu-item:hover {
+    background: var(--surface-2);
+  }
 }
 .menu-item[aria-checked='true'] {
   font-weight: 500;
@@ -888,7 +925,7 @@ html.i18n-pending [data-i18n] {
   gap: 2px;
   width: 100%; /* buttons do not stretch to their grid track by default */
   overflow: hidden;
-  padding: 14px 18px;
+  padding: 14px var(--card-pad);
   text-align: left;
   cursor: pointer;
   border-left: 1px solid var(--border-soft);
@@ -898,8 +935,10 @@ html.i18n-pending [data-i18n] {
 .stat:first-child {
   border-left: 0;
 }
-.stat:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .stat:hover {
+    background: var(--surface-2);
+  }
 }
 /* A tile that filters the list is marked like a selected tab; "all" is the
    resting state and carries no mark. */
@@ -951,7 +990,8 @@ html.i18n-pending [data-i18n] {
     border-top: 1px solid var(--border);
   }
   .stat {
-    padding: 12px 14px;
+    padding-top: 12px;
+    padding-bottom: 12px;
   }
 }
 
@@ -969,7 +1009,7 @@ html.i18n-pending [data-i18n] {
   grid-template-columns: var(--cols);
   align-items: center;
   column-gap: 14px;
-  padding: 0 18px;
+  padding: 0 var(--card-pad);
 }
 .srv-head {
   height: 36px;
@@ -997,8 +1037,10 @@ html.i18n-pending [data-i18n] {
   border-bottom: 0;
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
-.srv-row:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .srv-row:hover {
+    background: var(--surface-2);
+  }
 }
 .srv-row > div {
   min-width: 0;
@@ -1103,7 +1145,6 @@ html.kb .copy-btn:focus-visible {
   .srv-head,
   .srv-row {
     column-gap: 12px;
-    padding: 0 16px;
   }
   .srv-head > .c-uptime,
   .srv-row > .c-uptime,
@@ -1146,7 +1187,7 @@ html.kb .copy-btn:focus-visible {
       'net net net';
     row-gap: 6px;
     column-gap: 14px;
-    padding: 10px 14px 11px;
+    padding: 10px var(--card-pad) 11px;
   }
   .srv-row > .c-name { grid-area: name; }
   .srv-row > .c-health {
@@ -1346,6 +1387,22 @@ html.kb .copy-btn:focus-visible {
   }
   .modal-body { padding: 14px 16px; }
   .modal-foot { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); }
+  /* A confirmation is a sentence and two buttons: it rises from the bottom
+     at its own height instead of filling the screen, title and close button
+     on one line. */
+  .modal-panel[role='alertdialog'] {
+    height: auto;
+    border-top: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+  .modal-panel[role='alertdialog'] .modal-head {
+    flex-direction: row;
+    align-items: center;
+  }
+  .modal-panel[role='alertdialog'] .modal-head > .icon-btn {
+    align-self: center;
+    margin: 0 -6px 0 0;
+  }
 }
 body.modal-open {
   overflow: hidden;
@@ -1524,8 +1581,10 @@ body.modal-open {
   border: 0;
   cursor: pointer;
 }
-.issues-toggle:hover {
-  color: var(--text-2);
+@media (hover: hover) {
+  .issues-toggle:hover {
+    color: var(--text-2);
+  }
 }
 
 .metric-card {
@@ -1600,8 +1659,10 @@ body.modal-open {
   border: 0;
   cursor: pointer;
 }
-.sensor-toggle:hover {
-  color: var(--text-2);
+@media (hover: hover) {
+  .sensor-toggle:hover {
+    color: var(--text-2);
+  }
 }
 .sensor {
   display: inline-flex;
@@ -1651,6 +1712,12 @@ body.modal-open {
     position: absolute;
     inset: 0 -8px;
   }
+  /* The name's copy button only shows on hover: on a touch screen it would
+     be an invisible target beside the name, copying instead of opening the
+     dialog (which has its own copy button). */
+  .copy-btn {
+    display: none;
+  }
 }
 
 /* ============================================================
@@ -1664,6 +1731,16 @@ body.modal-open {
   font-size: 16px;
   font-weight: 600;
   color: var(--text);
+}
+/* The pulse line in the top bar beats slowly; it stays still for anyone who
+   asks for less motion (the rule at the end of this file). */
+.pulse-beat {
+  animation: pulse-beat 2.4s ease-in-out infinite;
+}
+@keyframes pulse-beat {
+  0%,
+  100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 .live {
   display: inline-flex;
@@ -1681,39 +1758,298 @@ body.modal-open {
 /* ============================================================
    Admin list
    ============================================================ */
+/* The console header: title and count, the two main actions, then the page
+   tools behind a hairline. On a phone the tools sit beside the title and the
+   actions take the line below, so nothing wraps in either language. */
+.admin-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'heading tools'
+    'actions actions';
+  align-items: center;
+  gap: 12px;
+  padding: 16px var(--card-pad) 14px;
+}
+.admin-heading {
+  grid-area: heading;
+  min-width: 0;
+}
+.admin-actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.admin-tools {
+  grid-area: tools;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+@media (min-width: 768px) {
+  .admin-top {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas: 'heading actions tools';
+    padding-top: 18px;
+    padding-bottom: 16px;
+  }
+  .admin-tools {
+    padding-left: 10px;
+    border-left: 1px solid var(--border);
+  }
+}
+
+/* The side padding every list card shares, its header included, so a title
+   lines up with the rows under it (the dashboard's rows use the same). */
+.card {
+  --card-pad: 18px;
+}
+@media (max-width: 1023px) {
+  .card {
+    --card-pad: 16px;
+  }
+}
+@media (max-width: 639px) {
+  .card {
+    --card-pad: 14px;
+  }
+}
+
+/* The list is a table like the dashboard's: one card, a row of column
+   headings, hairlines between rows. Every line in a row is 24 px, so a row
+   reads straight across: name / system / IPv4 / received on the first line,
+   id and type / CPU / IPv6 / sent on the second, tags underneath. The areas
+   change with the width: on a tablet the system line moves under the name,
+   below 768 px (phones, narrow tablets) the row becomes a card. Touch
+   screens have no drag handle. */
+.admin-table {
+  --a-cols: 16px minmax(0, 1.45fr) minmax(0, 1.2fr) minmax(0, 1.3fr) 92px 94px;
+  --a-areas: 'grip main sys net traffic actions' 'grip tags tags . . .';
+  --a-head: 'grip main sys net traffic actions';
+}
+@media (max-width: 1023px) {
+  .admin-table {
+    --a-cols: 16px minmax(0, 1fr) minmax(168px, 1fr) 84px 94px;
+    --a-areas: 'grip main net traffic actions' 'grip sys sys sys sys' 'grip tags tags tags tags';
+    --a-head: 'grip main net traffic actions';
+  }
+}
+@media (max-width: 767px) {
+  .admin-table {
+    --a-cols: 16px minmax(0, 1fr) auto;
+    --a-areas: 'grip main actions' 'grip sys sys' 'grip net traffic' 'grip tags tags';
+  }
+}
+@media (pointer: coarse) {
+  .admin-table {
+    --a-cols: minmax(0, 1.45fr) minmax(0, 1.2fr) minmax(0, 1.3fr) 92px 94px;
+    --a-areas: 'main sys net traffic actions' 'tags tags . . .';
+    --a-head: 'main sys net traffic actions';
+  }
+  .admin-table .a-grip,
+  .admin-table .h-grip {
+    display: none;
+  }
+}
+@media (pointer: coarse) and (max-width: 1023px) {
+  .admin-table {
+    --a-cols: minmax(0, 1fr) minmax(168px, 1fr) 84px 94px;
+    --a-areas: 'main net traffic actions' 'sys sys sys sys' 'tags tags tags tags';
+    --a-head: 'main net traffic actions';
+  }
+}
+@media (pointer: coarse) and (max-width: 767px) {
+  .admin-table {
+    --a-cols: minmax(0, 1fr) auto;
+    --a-areas: 'main actions' 'sys sys' 'net traffic' 'tags tags';
+  }
+}
+.admin-head,
 .admin-row {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1.6fr) minmax(0, 1.3fr) minmax(0, 0.8fr) auto;
+  grid-template-columns: var(--a-cols);
+  column-gap: 16px;
+  padding: 0 var(--card-pad);
+}
+.admin-head {
+  grid-template-areas: var(--a-head);
   align-items: center;
-  gap: 14px;
-  padding: 10px 14px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  font-size: 13px;
+  height: 36px;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
 }
-/* On a phone the OS / CPU line may wrap to two lines instead of being cut. */
-@media (max-width: 639px) {
-  .admin-row .a-sub .a-seg {
-    white-space: nowrap;
-  }
-  .admin-row .a-sub {
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    line-height: 1.4;
+.admin-head > div {
+  min-width: 0;
+  overflow: hidden;
+}
+.admin-head > .h-grip { grid-area: grip; }
+.admin-head > .h-main { grid-area: main; padding-left: 15px; }
+.admin-head > .h-sys { grid-area: sys; }
+.admin-head > .h-net { grid-area: net; }
+.admin-head > .h-traffic { grid-area: traffic; }
+.admin-head > .h-actions { grid-area: actions; }
+.admin-table.is-empty .admin-head {
+  display: none;
+}
+.admin-row {
+  grid-template-areas: var(--a-areas);
+  align-items: start;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 12px;
+  line-height: 18px;
+  transition: background-color 0.1s ease;
+}
+.admin-row:last-child {
+  border-bottom: 0;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+.admin-row > .a-grip { grid-area: grip; height: 24px; }
+.admin-row > .a-main { grid-area: main; min-width: 0; }
+.admin-row > .a-sys { grid-area: sys; min-width: 0; }
+.admin-row > .a-net { grid-area: net; min-width: 0; }
+.admin-row > .a-traffic { grid-area: traffic; }
+.admin-row > .a-actions { grid-area: actions; }
+.admin-row > .a-tags { grid-area: tags; }
+/* The name wraps rather than being cut; the dot stays centred on its first
+   line and the lines below start under the name, not under the dot. */
+.a-title {
+  position: relative;
+  padding: 2px 0 2px 15px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.a-title > .dot {
+  position: absolute;
+  left: 0;
+  top: 8.5px;
+}
+.a-meta {
+  padding: 3px 0 3px 15px;
+  color: var(--text-3);
+}
+.a-sys {
+  padding: 3px 0;
+  color: var(--text-3);
+}
+.a-sys .seps > span {
+  row-gap: 6px;
+}
+/* A column of its own on wide screens: the system name on the first line,
+   the processor on the second. */
+@media (min-width: 1024px) {
+  .a-sys .a-os {
+    flex-basis: 100%;
   }
 }
-.admin-row:hover {
-  border-color: var(--border-strong);
+/* Label, address and copy button sit on the line's 24 px; an IPv6 address
+   that wraps continues under itself and the label stays on its first line. */
+.a-ip {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+.a-ip-label {
+  width: 30px;
+  flex-shrink: 0;
+  padding: 3px 0;
+  color: var(--text-3);
+}
+.a-ip-val {
+  min-width: 0;
+  padding: 3px 0;
+  color: var(--text);
+  /* Only for a group wider than the whole line (a very narrow screen). */
+  overflow-wrap: anywhere;
+}
+.a-copy {
+  flex-shrink: 0;
+}
+.a-tr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  white-space: nowrap;
+}
+.a-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  margin-top: -3px;
+}
+.a-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 6px;
+  padding-left: 15px;
+}
+@media (max-width: 1023px) {
+  .admin-head > .h-sys {
+    display: none;
+  }
+  .admin-row > .a-sys {
+    padding-left: 15px;
+  }
+  /* Under the name a host that never reported has no system line at all,
+     rather than a line holding a dash. */
+  .admin-row > .a-sys.is-empty {
+    display: none;
+  }
+}
+@media (max-width: 767px) {
+  .admin-head {
+    display: none;
+  }
+  .admin-row {
+    column-gap: 10px;
+  }
+  .admin-row > .a-net {
+    padding-left: 15px;
+    margin-top: 4px;
+  }
+  .admin-row > .a-traffic {
+    justify-self: end;
+    margin-top: 4px;
+  }
+}
+@media (hover: hover) {
+  .admin-row:hover {
+    background: var(--surface-2);
+  }
+  /* Chips and buttons keep their own shade on a highlighted row. */
+  .admin-row:hover .tag,
+  .admin-row .icon-btn:hover {
+    background: var(--surface-3);
+  }
+  /* Copy buttons appear with the row, as on the dashboard; touch screens
+     always show them. */
+  .admin-row .a-copy {
+    opacity: 0;
+    transition: opacity 0.1s ease, background-color 0.12s ease, color 0.12s ease;
+  }
+  .admin-row:hover .a-copy,
+  .admin-row .a-copy:focus-visible,
+  .admin-row .a-copy.is-copied {
+    opacity: 1;
+  }
 }
 .admin-row.dragging {
   opacity: 0.4;
 }
-.admin-row.drop-before { box-shadow: 0 -2px 0 0 var(--text); }
-.admin-row.drop-after { box-shadow: 0 2px 0 0 var(--text); }
+.admin-row.drop-before { box-shadow: inset 0 2px 0 0 var(--text); }
+.admin-row.drop-after { box-shadow: inset 0 -2px 0 0 var(--text); }
 .drag-handle {
   color: var(--text-3);
   cursor: grab;
@@ -1722,21 +2058,59 @@ body.modal-open {
   justify-content: center;
 }
 .drag-handle:active { cursor: grabbing; }
-@media (max-width: 767px) {
-  .admin-row {
-    grid-template-columns: 20px minmax(0, 1fr) auto;
-    grid-template-areas:
-      'grip main actions'
-      'grip net actions'
-      'grip traffic actions';
-    row-gap: 6px;
+/* The two copy buttons of a row sit 24 px apart: on a touch screen their
+   targets widen sideways only, so a tap on the IPv4 button never lands on
+   the IPv6 one below it. */
+@media (pointer: coarse) {
+  .a-copy::after {
+    inset: 0 -8px;
   }
-  .admin-row > .a-grip { grid-area: grip; }
-  .admin-row > .a-main { grid-area: main; }
-  .admin-row > .a-net { grid-area: net; }
-  .admin-row > .a-traffic { grid-area: traffic; }
-  .admin-row > .a-actions { grid-area: actions; flex-direction: column; }
 }
+
+/* Install dialog: each command in full, with its own copy button. */
+.cmd-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.cmd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cmd-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.cmd-text {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The icon beside a confirmation's title, tinted by what is at stake. */
+.icon-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-lg);
+}
+.icon-tile.is-crit { color: var(--crit); background: var(--crit-tint); }
+.icon-tile.is-warn { color: var(--warn); background: var(--warn-tint); }
 
 /* Toasts */
 .toast-host {
@@ -1866,7 +2240,6 @@ html.glass-enabled.light {
   --border: rgba(0, 0, 0, 0.07);
 }
 html.glass-enabled .card,
-html.glass-enabled .admin-row,
 html.glass-enabled .login-card,
 html.glass-enabled .menu,
 html.glass-enabled .topbar {

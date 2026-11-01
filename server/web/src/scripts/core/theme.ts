@@ -85,6 +85,28 @@ export function onThemeChange(fn: (theme: Theme) => void): void {
   window.addEventListener('pulse:theme', (e: any) => fn(e.detail?.theme || getTheme()));
 }
 
+// Until a theme is picked here, the page follows the system's, also when the
+// system changes it while the page is open (an automatic dark mode at dusk).
+function storedTheme(): string | null {
+  try {
+    return localStorage.getItem(KEY);
+  } catch {
+    return null;
+  }
+}
+try {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    const stored = storedTheme();
+    if (stored === 'dark' || stored === 'light') return;
+    const theme = systemTheme();
+    if (document.documentElement.classList.contains(theme)) return;
+    applyClasses(theme);
+    syncThemeColor();
+    window.dispatchEvent(new CustomEvent('pulse:theme', { detail: { theme } }));
+    window.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
+  });
+} catch {}
+
 // The boot script guessed the top bar's colour before the page existed; now
 // that it does, measure it (the login page has no top bar at all).
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncThemeColor);

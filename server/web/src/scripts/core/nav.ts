@@ -5,7 +5,7 @@ import { navbarConfig } from './api';
 import { installFocusMode } from './focus';
 
 const DEFAULT_LOGO =
-  '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" class="default-logo"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6.5 12h2l2-6 3 18 2.5-12h2"><animate attributeName="opacity" values="0.55;1;0.55" dur="2.4s" repeatCount="indefinite"/></path><path stroke="currentColor" stroke-linecap="round" stroke-width="1.8" d="M2.5 12h2M19.5 12h2" opacity="0.5"/></svg>';
+  '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" class="default-logo"><path class="pulse-beat" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6.5 12h2l2-6 3 18 2.5-12h2"/><path stroke="currentColor" stroke-linecap="round" stroke-width="1.8" d="M2.5 12h2M19.5 12h2" opacity="0.5"/></svg>';
 
 function applyBrand(): void {
   const cfg = navbarConfig();

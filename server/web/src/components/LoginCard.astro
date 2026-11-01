@@ -33,7 +33,8 @@ import Icon from './Icon.astro';
 
     <div class="flex items-center justify-between mt-6 pt-5 border-t border-[var(--border)]">
       <a href="/" class="text-[12px] t-3 hover:text-[var(--text)] inline-flex items-center gap-1.5 transition-colors"><Icon name="chevron-left" size={13} /><span data-i18n="login.back">Back</span></a>
-      <div class="flex items-center gap-1">
+      <!-- 8 px apart: on a touch screen each button's target reaches 8 px out (global.css), so neither covers the other. -->
+      <div class="flex items-center gap-2">
         <button id="lang-btn" type="button" class="icon-btn icon-btn-sm" data-i18n-title="common.language"><Icon name="languages" size={15} /></button>
         <button id="theme-btn" type="button" class="icon-btn icon-btn-sm"><span class="only-dark"><Icon name="moon" size={15} /></span><span class="only-light"><Icon name="sun" size={15} /></span></button>
       </div>
