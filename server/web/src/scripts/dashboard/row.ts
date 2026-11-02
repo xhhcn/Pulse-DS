@@ -91,15 +91,26 @@ function metaHtml(s: Server): string {
   return parts.filter(Boolean).join('');
 }
 
+/** What the row's button says: the name and whether the host is online. */
+function openLabel(s: Server): string {
+  return `${s.name} · ${s.online ? t('common.online') : t('common.offline')}`;
+}
+
+/**
+ * One host as a list item. A pointer opens the dialog anywhere on the row
+ * (main.ts); the keyboard and screen readers have the name, which is a
+ * button, and each reading keeps its label (out of sight in the table,
+ * whose column headings no screen reader ties to the cells).
+ */
 export function renderRow(s: Server, _opts: { showTags: boolean }): string {
   const zh = getLang() === 'zh';
   const statusLabel = s.online ? t('common.online') : t('common.offline');
   const up = uptimeState(s, zh);
   return `
-<div class="srv-row ${s.online ? '' : 'is-offline'}" role="button" tabindex="0" data-id="${attr(s.id)}" aria-label="${attr(s.name)} · ${attr(statusLabel)}">
+<div class="srv-row ${s.online ? '' : 'is-offline'}" role="listitem" data-id="${attr(s.id)}">
   <div class="c-name flex items-center gap-2.5 min-w-0">
     <span class="dot ${s.online ? 'dot-online' : 'dot-offline'}" data-f="dot" title="${attr(statusLabel)}"></span>
-    <span class="srv-name" data-f="name" title="${attr(s.name)}">${esc(s.name)}</span>
+    <button type="button" class="srv-open" data-f="open" aria-label="${attr(openLabel(s))}"><span class="srv-name" data-f="name" title="${attr(s.name)}">${esc(s.name)}</span></button>
     <button type="button" class="copy-btn icon-btn icon-btn-sm shrink-0" data-copy-name="${attr(s.name)}" title="${attr(t('dash.copyName'))}" aria-label="${attr(t('dash.copyName'))}">
       <span class="i-copy">${icon('copy', 12)}</span><span class="i-check" hidden>${icon('check', 12)}</span>
     </button>
@@ -132,7 +143,6 @@ export function patchRow(el: HTMLElement, s: Server, prev: Server | null, _opts:
       dot.className = `dot ${s.online ? 'dot-online' : 'dot-offline'}`;
       dot.title = s.online ? t('common.online') : t('common.offline');
     }
-    el.setAttribute('aria-label', `${s.name} · ${s.online ? t('common.online') : t('common.offline')}`);
   }
   if (changed('name')) {
     const n = q('name');
@@ -143,6 +153,7 @@ export function patchRow(el: HTMLElement, s: Server, prev: Server | null, _opts:
     const c = el.querySelector<HTMLElement>('[data-copy-name]');
     if (c) c.setAttribute('data-copy-name', s.name);
   }
+  if (changed('online') || changed('name')) q('open')?.setAttribute('aria-label', openLabel(s));
   const healthChanged = !prev || prev.health !== s.health || prev.issues.join('|') !== s.issues.join('|');
   if (healthChanged) {
     const h = q('health');

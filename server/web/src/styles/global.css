@@ -24,6 +24,8 @@
   --info: #1d4ed8;
   --bar: #22a06b;
   --warn-fill: #d97706;
+  /* 80–90 %, between the warning and the critical shade of each theme. */
+  --high-fill: #ea580c;
   --crit-fill: #dc2626;
   /* Fill for white-on-red controls. The dark theme lightens --crit so red
      text reads on a dark surface, which leaves white text on it at 2.8:1. */
@@ -34,6 +36,19 @@
   --warn-tint: rgba(217, 119, 6, 0.12);
   --crit-tint: rgba(220, 38, 38, 0.12);
   --info-tint: rgba(37, 99, 235, 0.1);
+  /* TCPing lines, one per target in this order. A categorical palette checked
+     for colour-blind separation (no two neighbours alike in any common colour
+     blindness), with its own steps for the dark surface. Green and red come
+     last: they read as status. The target cards carry each name and value,
+     so no line has to be told apart by colour alone. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
 }
 
 /* Three text levels, the same lightness steps in both themes. --text-3 still
@@ -43,10 +58,15 @@ html.dark {
   --border-soft: rgba(255, 255, 255, 0.045);
   --bg: #121214;
   --surface: #18191b;
+  /* Layers that float over other content (dialogs, menus, toasts) stay this
+     opaque shade even where --surface is translucent (glass mode). */
+  --surface-solid: #18191b;
   --surface-2: #202124;
   --surface-3: #2a2b2f;
   --border: rgba(255, 255, 255, 0.07);
   --border-strong: rgba(255, 255, 255, 0.14);
+  --scroll-thumb: rgba(255, 255, 255, 0.18);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.28);
   --text: #e8e8ea;
   --text-2: #a5a5ad;
   --text-3: #878790;
@@ -60,8 +80,17 @@ html.dark {
   --info: #60a5fa;
   --bar: #34c27a;
   --warn-fill: #fbbf24;
+  --high-fill: #fb923c;
   --crit-fill: #f87171;
   --selection: rgba(96, 165, 250, 0.3);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
 }
 
 html.light {
@@ -69,10 +98,13 @@ html.light {
   --border-soft: rgba(0, 0, 0, 0.05);
   --bg: #f6f6f7;
   --surface: #ffffff;
+  --surface-solid: #ffffff;
   --surface-2: #f2f2f4;
   --surface-3: #e6e6ea;
   --border: rgba(0, 0, 0, 0.08);
   --border-strong: rgba(0, 0, 0, 0.16);
+  --scroll-thumb: rgba(0, 0, 0, 0.22);
+  --scroll-thumb-hover: rgba(0, 0, 0, 0.34);
   --text: #1d1d20;
   --text-2: #52525b;
   --text-3: #6e6e78;
@@ -120,19 +152,26 @@ html.theme-switching *::after {
   animation-timing-function: ease-in-out;
 }
 
-/* ---------- scrollbars ---------- */
+/* ---------- scrollbars ----------
+   A thin thumb that still shows where the page is: drawn in --surface-3 it
+   was 1.1:1 on the light page, next to invisible wherever scrollbars are
+   always shown (Windows, Linux, macOS set to show them). */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--surface-3) transparent;
+  scrollbar-color: var(--scroll-thumb) transparent;
 }
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--surface-3);
+  background: var(--scroll-thumb);
   border-radius: 999px;
   border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-track {
@@ -182,6 +221,24 @@ html.kb :focus-visible {
 }
 .section-title svg {
   display: none;
+}
+
+/* The page's side gutter. With viewport-fit=cover a phone held sideways draws
+   the page under its notch and round corners: there the gutter grows to the
+   safe area. The footer clears the home indicator of an installed web app. */
+.page-x {
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+@media (min-width: 640px) {
+  .page-x {
+    padding-left: max(24px, env(safe-area-inset-left, 0px));
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+  }
+}
+.page-foot {
+  padding-top: 24px;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
 }
 
 /* ============================================================
@@ -342,6 +399,18 @@ html.kb :focus-visible {
 .input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+/* A field the browser filled in (a saved password) keeps the theme's colours
+   instead of the browser's own blue or yellow tint. The inset shadow covers
+   that tint, so it has to be opaque: the solid surface, also in glass mode. */
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--text);
+  -webkit-box-shadow: 0 0 0 100px var(--surface-solid) inset;
+  box-shadow: 0 0 0 100px var(--surface-solid) inset;
+  filter: none;
 }
 /* A field a message is about (set by the page, cleared when it is edited). */
 .input[aria-invalid='true'],
@@ -551,7 +620,7 @@ html.kb .switch input:focus-visible + span {
 }
 .fill-ok { background: var(--bar); }
 .fill-mid { background: var(--warn-fill); }
-.fill-high { background: #f97316; }
+.fill-high { background: var(--high-fill); }
 .fill-crit { background: var(--crit-fill); }
 .fill-off { background: var(--text-3); opacity: 0.4; }
 .bigmeter-track {
@@ -744,8 +813,10 @@ html.kb .switch input:focus-visible + span {
 .tp-svg .tp-grid line.tp-axis {
   stroke: var(--border);
 }
+/* Each line group, dot and marker carries its target's colour as --c. */
 .tp-svg .tp-line path {
   fill: none;
+  stroke: var(--c);
   stroke-width: 1.5;
   stroke-linejoin: round;
   stroke-linecap: round;
@@ -759,6 +830,9 @@ html.kb .switch input:focus-visible + span {
 .tp-svg .tp-line.is-dim path {
   stroke-width: 1;
 }
+.tp-svg .tp-dot {
+  fill: var(--c);
+}
 .tp-svg .tp-cross {
   stroke: var(--text-3);
   stroke-dasharray: 3 3;
@@ -766,6 +840,7 @@ html.kb .switch input:focus-visible + span {
 }
 .tp-svg .tp-marker {
   fill: var(--surface);
+  stroke: var(--c);
   stroke-width: 1.5;
 }
 .tp-tip {
@@ -880,6 +955,11 @@ html.kb .switch input:focus-visible + span {
   padding: 4px;
   z-index: 40;
 }
+/* At the foot of the login card the menu opens upwards. */
+.menu-up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
 .menu-label {
   padding: 6px 10px 4px;
   font-size: 12px;
@@ -903,6 +983,10 @@ html.kb .switch input:focus-visible + span {
 }
 .menu-item[aria-checked='true'] {
   font-weight: 500;
+}
+/* ↑/↓ move between the choices: the ring stays inside the menu. */
+html.kb .menu-item:focus-visible {
+  outline-offset: -2px;
 }
 
 /* Until the page script has translated the built-in English text (Chinese
@@ -1050,6 +1134,16 @@ html.i18n-pending [data-i18n] {
 .srv-row.is-offline .meter-val {
   color: var(--text-2);
 }
+/* The name is the row's button for the keyboard and screen readers; a
+   pointer opens the dialog anywhere on the row. */
+.srv-open {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 0 1 auto;
+  text-align: left;
+  cursor: inherit;
+}
 .srv-name {
   font-size: 14px;
   font-weight: 500;
@@ -1059,6 +1153,17 @@ html.i18n-pending [data-i18n] {
   text-overflow: ellipsis;
   min-width: 0;
   flex: 0 1 auto;
+}
+/* The keyboard ring goes round the whole row, as when the row itself took
+   focus (browsers without :has() ring the name). */
+@supports selector(:has(*)) {
+  html.kb .srv-open:focus-visible {
+    outline: none;
+  }
+  html.kb .srv-row:has(.srv-open:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
 }
 .cell-num {
   font-size: 12px;
@@ -1166,9 +1271,19 @@ html.kb .copy-btn:focus-visible {
   }
 }
 @media (min-width: 640px) {
-  .srv-row > .c-meta,
-  .srv-row .m-label {
+  .srv-row > .c-meta {
     display: none;
+  }
+  /* The column headings name the readings on screen; for a screen reader,
+     which does not tie them to the cells, each reading keeps its label. */
+  .srv-row .m-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 }
 @media (max-width: 639px) {
@@ -1293,7 +1408,9 @@ html.kb .copy-btn:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--modal-gap) 16px;
+  /* Clear of a sideways phone's notch and home indicator (see .page-x). */
+  padding: var(--modal-gap) max(16px, env(safe-area-inset-right, 0px)) max(var(--modal-gap), env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
 }
 .modal-backdrop {
   position: absolute;
@@ -1315,6 +1432,9 @@ html.kb .copy-btn:focus-visible {
   animation: modal-in 0.18s ease-out;
   overflow: hidden;
 }
+/* A dialog that is a form: the form inside the panel adds no box, so its
+   head, body and foot lay out as in any other dialog. */
+.modal-form { display: contents; }
 .modal-panel.is-wide { max-width: 720px; }
 .modal-panel.is-xl { max-width: 1000px; }
 .modal-root.is-closing .modal-backdrop { animation: fade-out 0.12s ease-in forwards; }
@@ -1343,6 +1463,11 @@ html.kb .copy-btn:focus-visible {
   overscroll-behavior: contain;
   flex: 1 1 auto;
   min-height: 0;
+}
+/* The server dialog's content takes focus, so the keyboard can scroll what
+   has no button in it; the ring stays inside the panel. */
+html.kb .modal-body:focus-visible {
+  outline-offset: -2px;
 }
 .modal-foot {
   display: flex;
@@ -1386,7 +1511,7 @@ html.kb .copy-btn:focus-visible {
     margin: -6px -6px 0 0;
   }
   .modal-body { padding: 14px 16px; }
-  .modal-foot { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .modal-foot { padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
   /* A confirmation is a sentence and two buttons: it rises from the bottom
      at its own height instead of filling the screen, title and close button
      on one line. */
@@ -1526,6 +1651,20 @@ body.modal-open {
 }
 .dtable-scroll {
   overflow-x: auto;
+}
+/* A table that scrolls sideways takes focus (hardware.ts): its keyboard ring
+   goes round the table's frame, clear of the edge fades. */
+html.kb .dtable-scroll:focus-visible {
+  outline-offset: -2px;
+}
+@supports selector(:has(*)) {
+  html.kb .dtable-scroll:focus-visible {
+    outline: none;
+  }
+  html.kb .dtable-wrap:has(> .dtable-scroll:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
 }
 .dtable-scroll.more-right {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
@@ -1723,7 +1862,11 @@ body.modal-open {
 /* ============================================================
    Top bar / footer
    ============================================================ */
+/* Above the page, so the theme menu that drops from it stays on top of the
+   cards (in glass mode each frosted card is a layer of its own). */
 .topbar {
+  position: relative;
+  z-index: 30;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
@@ -2113,13 +2256,18 @@ body.modal-open {
 .icon-tile.is-warn { color: var(--warn); background: var(--warn-tint); }
 
 /* Toasts */
+/* Toasts keep to the right, inside the same gutter as the page on both sides
+   (a long one on a narrow phone wraps instead of reaching the left edge) and
+   above the home indicator. */
 .toast-host {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  left: max(16px, env(safe-area-inset-left, 0px));
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   z-index: 200;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
   pointer-events: none;
   transition: bottom 0.15s ease;
@@ -2128,7 +2276,7 @@ body.modal-open {
    bottom edge: a toast rises above them instead of covering them. */
 @media (max-width: 639px) {
   body.modal-open .toast-host {
-    bottom: calc(68px + env(safe-area-inset-bottom));
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
   }
 }
 .toast {
@@ -2195,7 +2343,7 @@ body.modal-open {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 16px;
+  padding: 40px max(16px, env(safe-area-inset-right, 0px)) 40px max(16px, env(safe-area-inset-left, 0px));
 }
 .login-wrap.is-held {
   justify-content: flex-start;
@@ -2213,26 +2361,30 @@ body.modal-open {
 /* ============================================================
    Glass mode (optional admin toggle) — kept restrained
    ============================================================ */
+/* --bg is the gradient's base colour, so the loading screen and the edges a
+   trackpad overscroll reveals match the page. */
 html.glass-enabled.dark body {
-  background-color: #0d0d12;
+  background-color: var(--bg);
   background-image:
     radial-gradient(ellipse 70% 55% at 5% 5%, rgba(124, 58, 237, 0.2) 0%, transparent 70%),
     radial-gradient(ellipse 60% 65% at 95% 85%, rgba(59, 130, 246, 0.16) 0%, transparent 70%);
   background-attachment: fixed;
 }
 html.glass-enabled.light body {
-  background-color: #f4f4f9;
+  background-color: var(--bg);
   background-image:
     radial-gradient(ellipse 70% 55% at 5% 5%, rgba(124, 58, 237, 0.08) 0%, transparent 70%),
     radial-gradient(ellipse 60% 65% at 95% 85%, rgba(59, 130, 246, 0.07) 0%, transparent 70%);
   background-attachment: fixed;
 }
 html.glass-enabled.dark {
+  --bg: #0d0d12;
   --surface: rgba(22, 22, 28, 0.6);
   --surface-2: rgba(255, 255, 255, 0.05);
   --border: rgba(255, 255, 255, 0.08);
 }
 html.glass-enabled.light {
+  --bg: #f4f4f9;
   --surface: rgba(255, 255, 255, 0.75);
   /* A dark tint, not a whiter white: hover, selection and chips must still
      read against the frosted surface. */
@@ -2241,16 +2393,67 @@ html.glass-enabled.light {
 }
 html.glass-enabled .card,
 html.glass-enabled .login-card,
-html.glass-enabled .menu,
 html.glass-enabled .topbar {
   backdrop-filter: blur(18px) saturate(150%);
   -webkit-backdrop-filter: blur(18px) saturate(150%);
 }
-html.glass-enabled.dark .modal-panel { background: #18191b; }
-html.glass-enabled.light .modal-panel { background: #ffffff; }
+/* Layers that float over other content stay opaque, and so does everything
+   drawn on them: a frosted menu inside a frosted card is not blurred at all in
+   Chromium (its backdrop ends at the card), so the rows behind the sort menu
+   showed through its items, and the chart's lines through its tooltip. */
+html.glass-enabled .modal-panel,
+html.glass-enabled .menu,
+html.glass-enabled .toast {
+  --surface: var(--surface-solid);
+  background-color: var(--surface);
+}
 @media (prefers-reduced-transparency: reduce) {
-  html.glass-enabled.dark { --surface: #18191b; }
-  html.glass-enabled.light { --surface: #ffffff; }
+  html.glass-enabled.dark,
+  html.glass-enabled.light {
+    --surface: var(--surface-solid);
+  }
+}
+/* Windows High Contrast and other forced colours: the browser repaints every
+   colour with the system's and drops background colours, which left the
+   switches blank, the status dots and bars gone and every tab looking
+   selected. Draw those with system colours. */
+@media (forced-colors: active) {
+  .switch span {
+    border: 1px solid CanvasText;
+  }
+  .switch span::after {
+    top: 1px;
+    left: 1px;
+    background: CanvasText;
+  }
+  .switch input:checked + span {
+    background: Highlight;
+    border-color: Highlight;
+  }
+  .switch input:checked + span::after {
+    background: HighlightText;
+  }
+  /* Unselected tabs get the page colour (a transparent border would be forced
+     to text colour), so they sit just above the line rather than on it. */
+  .tab {
+    margin-bottom: 0;
+    border-bottom-color: Canvas;
+  }
+  .tab[aria-selected='true'],
+  .tp-target[aria-pressed='true'] {
+    border-color: Highlight;
+  }
+  .stat[aria-pressed='true']:not([data-filter='all']) {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  /* Status colours carry meaning: keep them. */
+  .dot,
+  .meter-fill,
+  .issue::before,
+  .toast .ti {
+    forced-color-adjust: none;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

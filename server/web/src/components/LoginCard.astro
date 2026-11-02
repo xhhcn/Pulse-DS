@@ -1,8 +1,9 @@
 ---
 import Icon from './Icon.astro';
+import ThemeMenu from './ThemeMenu.astro';
 ---
 
-<div class="login-wrap">
+<main class="login-wrap">
   <div class="login-card">
     <div class="flex items-center gap-2.5 mb-7">
       <span id="brand-logo" class="inline-flex w-8 h-8 items-center justify-center rounded-lg" aria-hidden="true">
@@ -36,17 +37,11 @@ import Icon from './Icon.astro';
       <!-- 8 px apart: on a touch screen each button's target reaches 8 px out (global.css), so neither covers the other. -->
       <div class="flex items-center gap-2">
         <button id="lang-btn" type="button" class="icon-btn icon-btn-sm" data-i18n-title="common.language"><Icon name="languages" size={15} /></button>
-        <button id="theme-btn" type="button" class="icon-btn icon-btn-sm"><span class="only-dark"><Icon name="moon" size={15} /></span><span class="only-light"><Icon name="sun" size={15} /></span></button>
+        <ThemeMenu compact />
       </div>
     </div>
   </div>
-</div>
-
-<style is:global>
-  html.dark .only-light { display: none; }
-  html.light .only-dark { display: none; }
-  .only-dark, .only-light { display: inline-flex; }
-</style>
+</main>
 
 <script>
   import '../scripts/login/main';

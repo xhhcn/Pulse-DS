@@ -6,6 +6,7 @@ import { applyI18n, getLang, t, tn } from '../core/i18n';
 import { copyText, debounce, esc, flashCopied, sepsText } from '../core/dom';
 import { HttpError, SSEClient, adminToken, apiBase, errorText, getJSON, navbarConfig, redirectToLogin, shareToken } from '../core/api';
 import { hydrateRemoteIcons, icon } from '../core/icons';
+import { menuButton } from '../core/menu';
 import { DetailDialog, idFromHash } from './detail';
 import { renderRow, patchRow } from './row';
 import { matchesFilter, matchesQuery, normalize, rememberHardware, sortServers, type FilterKey, type Server, type SortField } from './state';
@@ -184,6 +185,7 @@ function emptyHtml(kind: 'none' | 'filtered' | 'error', msg = ''): string {
 function clearRows(): void {
   rows.clear();
   body.innerHTML = '';
+  body.removeAttribute('role');
 }
 
 function paint(): void {
@@ -201,7 +203,14 @@ function paint(): void {
     body.innerHTML = emptyHtml('filtered');
     return;
   }
-  if (rows.size === 0) body.innerHTML = '';
+  if (rows.size === 0) {
+    body.innerHTML = '';
+    body.setAttribute('role', 'list');
+  }
+  // Moving or rebuilding a row takes focus from the button in it: a keyboard
+  // user's place survives a live re-sort.
+  const active = document.activeElement as HTMLElement | null;
+  let focused = active && body.contains(active) ? active : null;
 
   const keep = new Set<string>();
   const first = rows.size === 0;
@@ -221,7 +230,14 @@ function paint(): void {
         el.classList.add('rise-in');
         el.style.animationDelay = `${Math.min(i, 12) * 35}ms`;
       }
-      if (entry) entry.el.replaceWith(el);
+      if (entry) {
+        const had = focused && entry.el.contains(focused);
+        entry.el.replaceWith(el);
+        if (had) {
+          focused = el.querySelector<HTMLElement>('.srv-open');
+          focused?.focus({ preventScroll: true });
+        }
+      }
       rows.set(s.id, { el, s });
     }
   });
@@ -240,6 +256,7 @@ function paint(): void {
     const frag = document.createDocumentFragment();
     desired.forEach((el) => frag.appendChild(el));
     body.replaceChildren(frag);
+    if (focused && focused.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
   }
   hydrateRemoteIcons(body);
 }
@@ -511,38 +528,18 @@ function setupControls(): void {
   const sortBtn = document.getElementById('sort-btn');
   const menu = document.getElementById('sort-menu');
   if (sortBtn && menu) {
-    sortBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      menu.hidden = !menu.hidden;
-      sortBtn.setAttribute('aria-expanded', String(!menu.hidden));
-    });
-    document.addEventListener('click', (e) => {
-      if (!menu.hidden && !menu.contains(e.target as Node)) {
-        menu.hidden = true;
-        sortBtn.setAttribute('aria-expanded', 'false');
+    menuButton(sortBtn, menu, (b) => {
+      const f = b.dataset.sort as SortField;
+      if (f === state.sort && f !== 'default') state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+      else {
+        state.sort = f;
+        state.dir = f === 'cpu' || f === 'memory' || f === 'disk' || f === 'uptime' ? 'desc' : 'asc';
       }
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && !menu.hidden) {
-        menu.hidden = true;
-        sortBtn.setAttribute('aria-expanded', 'false');
-      }
-    });
-    menu.querySelectorAll<HTMLElement>('[data-sort]').forEach((b) => {
-      b.addEventListener('click', () => {
-        const f = b.dataset.sort as SortField;
-        if (f === state.sort && f !== 'default') state.dir = state.dir === 'asc' ? 'desc' : 'asc';
-        else {
-          state.sort = f;
-          state.dir = f === 'cpu' || f === 'memory' || f === 'disk' || f === 'uptime' ? 'desc' : 'asc';
-        }
-        try {
-          localStorage.setItem(SORT_KEY, JSON.stringify({ sort: state.sort, dir: state.dir }));
-        } catch {}
-        updateSortLabel();
-        paint();
-        menu.hidden = true;
-      });
+      try {
+        localStorage.setItem(SORT_KEY, JSON.stringify({ sort: state.sort, dir: state.dir }));
+      } catch {}
+      updateSortLabel();
+      paint();
     });
   }
   try {
@@ -582,14 +579,6 @@ function setupControls(): void {
   body.addEventListener('pointerdown', (e) => {
     const row = (e.target as HTMLElement).closest<HTMLElement>('.srv-row');
     if (row && row.dataset.id) loadHardware(row.dataset.id);
-  });
-  body.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    const row = (e.target as HTMLElement).closest<HTMLElement>('.srv-row');
-    if (row && row === e.target && row.dataset.id) {
-      e.preventDefault();
-      detail.open(row.dataset.id);
-    }
   });
 }
 

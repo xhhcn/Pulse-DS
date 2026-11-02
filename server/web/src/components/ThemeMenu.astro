@@ -1,0 +1,37 @@
+---
+import Icon from './Icon.astro';
+interface Props {
+  /** The login card's small button, whose menu opens upwards. */
+  compact?: boolean;
+}
+const { compact = false } = Astro.props;
+const size = compact ? 15 : 17;
+const prefs = [
+  ['system', 'System'],
+  ['light', 'Light'],
+  ['dark', 'Dark'],
+];
+---
+
+<!-- The theme: the system's (until something else is picked), light or dark. The button shows the one in use. -->
+<div class="relative flex">
+  <button id="theme-btn" type="button" class={compact ? 'icon-btn icon-btn-sm' : 'icon-btn'} aria-haspopup="menu" aria-expanded="false" data-i18n-title="theme.title" title="Theme">
+    <span class="only-dark"><Icon name="moon" size={size} /></span><span class="only-light"><Icon name="sun" size={size} /></span>
+  </button>
+  <div id="theme-menu" class={compact ? 'menu menu-up' : 'menu'} role="menu" hidden>
+    <div class="menu-label" data-i18n="theme.title">Theme</div>
+    {prefs.map(([key, label]) => (
+      <button type="button" class="menu-item" role="menuitemradio" aria-checked="false" data-theme-pref={key}>
+        <span data-i18n={`theme.${key}`}>{label}</span>
+        <span class="mark inline-flex t-3"><Icon name="check" size={13} /></span>
+      </button>
+    ))}
+  </div>
+</div>
+
+<style is:global>
+  html.dark .only-light { display: none; }
+  html.light .only-dark { display: none; }
+  .only-dark, .only-light { display: inline-flex; }
+  [data-theme-pref][aria-checked='false'] .mark { visibility: hidden; }
+</style>

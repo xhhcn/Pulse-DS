@@ -24,12 +24,16 @@ function table(head: string[], rows: string[][], widths: string[] = []): string 
 /**
  * Tables wider than the dialog scroll sideways with the scrollbar hidden, so
  * the edge that has more columns behind it fades out (CSS: .more-left /
- * .more-right) — otherwise a cut-off column reads as a broken table.
+ * .more-right) — otherwise a cut-off column reads as a broken table. Such a
+ * table also takes focus, so that the arrow keys can scroll it.
  */
 export function updateScrollHint(el: HTMLElement): void {
   const max = el.scrollWidth - el.clientWidth;
   el.classList.toggle('more-left', max > 1 && el.scrollLeft > 1);
   el.classList.toggle('more-right', max > 1 && el.scrollLeft < max - 1);
+  if (max > 1) {
+    if (el.tabIndex !== 0) el.tabIndex = 0;
+  } else if (el.hasAttribute('tabindex') && document.activeElement !== el) el.removeAttribute('tabindex');
 }
 
 export function syncScrollHints(root: ParentNode): void {

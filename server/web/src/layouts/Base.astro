@@ -122,9 +122,12 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
         document.title = pageName ? pageName[lang === 'zh' ? 1 : 0] + ' · ' + site : site;
 
         // Browser chrome (the iPhone status bar, Safari's tinted tab bar)
-        // takes the top bar's colour for the theme chosen here, not the OS's.
+        // takes the top bar's colour for the theme chosen here, not the OS's;
+        // the login page has no top bar, so there it takes the page's.
+        // theme.ts measures the same colours once the page exists.
         var tc = document.querySelector('meta[name="theme-color"]');
-        if (tc) tc.setAttribute('content', theme === 'dark' ? (glass ? '#12121a' : '#18191b') : glass ? '#fcfcfe' : '#ffffff');
+        var colours = theme === 'dark' ? (glass ? ['#121218', '#0d0d12'] : ['#18191b', '#121214']) : glass ? ['#fcfcfe', '#f4f4f9'] : ['#ffffff', '#f6f6f7'];
+        if (tc) tc.setAttribute('content', colours[html.getAttribute('data-page') === 'login' ? 1 : 0]);
       })();
     </script>
   </head>

@@ -1,5 +1,6 @@
 ---
 import Icon from './Icon.astro';
+import ThemeMenu from './ThemeMenu.astro';
 interface Props {
   page?: 'home' | 'admin';
   showLive?: boolean;
@@ -8,7 +9,7 @@ const { page = 'home', showLive = false } = Astro.props;
 ---
 
 <header class="topbar">
-  <div class="mx-auto max-w-7xl px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+  <div class="mx-auto max-w-7xl page-x h-14 flex items-center justify-between gap-3">
     <a href="/" class="flex items-center gap-2.5 min-w-0" id="brand-link">
       <span id="brand-logo" class="inline-flex w-7 h-7 items-center justify-center rounded-lg text-[var(--text)] shrink-0" aria-hidden="true">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" class="default-logo">
@@ -28,10 +29,7 @@ const { page = 'home', showLive = false } = Astro.props;
       <button id="lang-btn" class="icon-btn" type="button" data-i18n-title="common.language" title="Language">
         <Icon name="languages" size={17} />
       </button>
-      <button id="theme-btn" class="icon-btn" type="button" title="Theme">
-        <span class="only-dark"><Icon name="moon" size={17} /></span>
-        <span class="only-light"><Icon name="sun" size={17} /></span>
-      </button>
+      <ThemeMenu />
       {page === 'admin' ? (
         <a href="/" class="icon-btn" data-i18n-title="common.home" title="Home"><Icon name="home" size={17} /></a>
       ) : (
@@ -40,12 +38,6 @@ const { page = 'home', showLive = false } = Astro.props;
     </div>
   </div>
 </header>
-
-<style is:global>
-  html.dark .only-light { display: none; }
-  html.light .only-dark { display: none; }
-  .only-dark, .only-light { display: inline-flex; }
-</style>
 
 <script>
   import { initNav } from '../scripts/core/nav';

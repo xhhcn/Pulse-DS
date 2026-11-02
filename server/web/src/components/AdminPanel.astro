@@ -15,7 +15,7 @@ const customCodePlaceholder = [
 ].join('\n');
 ---
 
-<section class="mx-auto max-w-7xl px-4 sm:px-6 pt-5 sm:pt-7 pb-2">
+<section class="mx-auto max-w-7xl page-x pt-5 sm:pt-7 pb-2">
   <div class="card">
     <div class="admin-top">
       <div class="admin-heading">
@@ -87,75 +87,79 @@ const customCodePlaceholder = [
 <!-- Add -->
 <div id="add-modal" class="modal-root" hidden>
   <div class="modal-backdrop"></div>
-  <form id="add-form" class="modal-panel" role="dialog" aria-modal="true" novalidate>
-    <div class="modal-head">
-      <div><div class="modal-title" data-i18n="admin.addModal.title">Add server</div><div class="modal-sub" data-i18n="admin.addModal.desc"></div></div>
-      <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
-    </div>
-    <div class="modal-body flex flex-col gap-4">
-      <div>
-        <label class="field-label" for="add-name"><span data-i18n="admin.form.name">Display name</span> <span class="text-[var(--crit)]">*</span></label>
-        <input id="add-name" name="name" class="input" required autocomplete="off" aria-describedby="add-name-error" data-i18n-placeholder="admin.form.namePlaceholder" data-autofocus />
-        <p id="add-name-error" class="field-error mt-1.5" hidden></p>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="add-title" aria-describedby="add-desc">
+    <form id="add-form" class="modal-form" novalidate>
+      <div class="modal-head">
+        <div><div id="add-title" class="modal-title" data-i18n="admin.addModal.title">Add server</div><div id="add-desc" class="modal-sub" data-i18n="admin.addModal.desc"></div></div>
+        <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
       </div>
-      <p class="field-hint flex items-start gap-2"><Icon name="info" size={13} class="shrink-0 mt-0.5" /><span data-i18n="admin.form.note"></span></p>
-      <p id="add-error" class="field-error" hidden></p>
-    </div>
-    <div class="modal-foot">
-      <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
-      <button type="submit" class="btn btn-primary" data-i18n="admin.form.add">Add</button>
-    </div>
-  </form>
+      <div class="modal-body flex flex-col gap-4">
+        <div>
+          <label class="field-label" for="add-name"><span data-i18n="admin.form.name">Display name</span> <span class="text-[var(--crit)]">*</span></label>
+          <input id="add-name" name="name" class="input" required autocomplete="off" aria-describedby="add-name-error" data-i18n-placeholder="admin.form.namePlaceholder" data-autofocus />
+          <p id="add-name-error" class="field-error mt-1.5" hidden></p>
+        </div>
+        <p class="field-hint flex items-start gap-2"><Icon name="info" size={13} class="shrink-0 mt-0.5" /><span data-i18n="admin.form.note"></span></p>
+        <p id="add-error" class="field-error" hidden></p>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-i18n="admin.form.add">Add</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <!-- Edit -->
 <div id="edit-modal" class="modal-root" hidden>
   <div class="modal-backdrop"></div>
-  <form id="edit-form" class="modal-panel" role="dialog" aria-modal="true" novalidate>
-    <input type="hidden" name="id" />
-    <div class="modal-head">
-      <div><div class="modal-title" data-i18n="admin.editModal.title">Edit server</div><div class="modal-sub mono" id="edit-id-label"></div></div>
-      <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
-    </div>
-    <div class="modal-body flex flex-col gap-4">
-      <div>
-        <label class="field-label" for="edit-name"><span data-i18n="admin.form.name">Display name</span> <span class="text-[var(--crit)]">*</span></label>
-        <input id="edit-name" name="name" class="input" required autocomplete="off" aria-describedby="edit-name-error" data-autofocus />
-        <p id="edit-name-error" class="field-error mt-1.5" hidden></p>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+    <form id="edit-form" class="modal-form" novalidate>
+      <input type="hidden" name="id" />
+      <div class="modal-head">
+        <div><div id="edit-title" class="modal-title" data-i18n="admin.editModal.title">Edit server</div><div class="modal-sub mono" id="edit-id-label"></div></div>
+        <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
       </div>
-      <div>
-        <label class="field-label" for="edit-tags" data-i18n="admin.form.tags">Tags</label>
-        <input id="edit-tags" name="tags" class="input" autocomplete="off" placeholder="Python, traffic:in, speed:out, spr:VIP, spb:pro" />
-        <p class="field-hint" data-i18n="admin.form.tagsHint"></p>
-      </div>
-      <div>
-        <div class="setting-row">
-          <div><div class="setting-title" data-i18n="admin.form.showOnHome">Show on homepage</div><div class="setting-desc" data-i18n="admin.form.showOnHomeDesc"></div></div>
-          <label class="switch"><input type="checkbox" name="show_on_home" checked /><span></span></label>
+      <div class="modal-body flex flex-col gap-4">
+        <div>
+          <label class="field-label" for="edit-name"><span data-i18n="admin.form.name">Display name</span> <span class="text-[var(--crit)]">*</span></label>
+          <input id="edit-name" name="name" class="input" required autocomplete="off" aria-describedby="edit-name-error" data-autofocus />
+          <p id="edit-name-error" class="field-error mt-1.5" hidden></p>
         </div>
-        <div class="setting-row">
-          <div><div class="setting-title" data-i18n="admin.form.showTcping">Show TCPing</div><div class="setting-desc" data-i18n="admin.form.showTcpingDesc"></div></div>
-          <label class="switch"><input type="checkbox" name="show_tcping" checked /><span></span></label>
+        <div>
+          <label class="field-label" for="edit-tags" data-i18n="admin.form.tags">Tags</label>
+          <input id="edit-tags" name="tags" class="input" autocomplete="off" placeholder="Python, traffic:in, speed:out, spr:VIP, spb:pro" />
+          <p class="field-hint" data-i18n="admin.form.tagsHint"></p>
         </div>
+        <div>
+          <div class="setting-row">
+            <div><div id="edit-home-label" class="setting-title" data-i18n="admin.form.showOnHome">Show on homepage</div><div id="edit-home-desc" class="setting-desc" data-i18n="admin.form.showOnHomeDesc"></div></div>
+            <label class="switch"><input type="checkbox" name="show_on_home" aria-labelledby="edit-home-label" aria-describedby="edit-home-desc" checked /><span></span></label>
+          </div>
+          <div class="setting-row">
+            <div><div id="edit-tcping-label" class="setting-title" data-i18n="admin.form.showTcping">Show TCPing</div><div id="edit-tcping-desc" class="setting-desc" data-i18n="admin.form.showTcpingDesc"></div></div>
+            <label class="switch"><input type="checkbox" name="show_tcping" aria-labelledby="edit-tcping-label" aria-describedby="edit-tcping-desc" checked /><span></span></label>
+          </div>
+        </div>
+        <p class="field-hint flex items-start gap-2"><Icon name="info" size={13} class="shrink-0 mt-0.5" /><span data-i18n="admin.form.note"></span></p>
+        <p id="edit-error" class="field-error" hidden></p>
       </div>
-      <p class="field-hint flex items-start gap-2"><Icon name="info" size={13} class="shrink-0 mt-0.5" /><span data-i18n="admin.form.note"></span></p>
-      <p id="edit-error" class="field-error" hidden></p>
-    </div>
-    <div class="modal-foot">
-      <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
-      <button type="submit" class="btn btn-primary" data-i18n="admin.form.update">Save changes</button>
-    </div>
-  </form>
+      <div class="modal-foot">
+        <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-i18n="admin.form.update">Save changes</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <!-- Delete -->
 <div id="delete-modal" class="modal-root" hidden>
   <div class="modal-backdrop"></div>
-  <div class="modal-panel" role="alertdialog" aria-modal="true">
+  <div class="modal-panel" role="alertdialog" aria-modal="true" aria-labelledby="delete-title" aria-describedby="delete-text">
     <div class="modal-head sm:items-center">
       <div class="flex items-center gap-3">
         <span class="icon-tile is-crit"><Icon name="trash" size={17} /></span>
-        <div class="modal-title" data-i18n="admin.deleteModal.title">Delete server</div>
+        <div id="delete-title" class="modal-title" data-i18n="admin.deleteModal.title">Delete server</div>
       </div>
       <button type="button" class="icon-btn -mr-1.5 -mt-1 sm:mt-0" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
     </div>
@@ -170,9 +174,9 @@ const customCodePlaceholder = [
 <!-- Settings -->
 <div id="settings-modal" class="modal-root" hidden>
   <div class="modal-backdrop"></div>
-  <div class="modal-panel is-wide" role="dialog" aria-modal="true">
+  <div class="modal-panel is-wide" role="dialog" aria-modal="true" aria-labelledby="settings-title">
     <div class="modal-head">
-      <div class="modal-title" data-i18n="settings.title">Settings</div>
+      <div id="settings-title" class="modal-title" data-i18n="settings.title">Settings</div>
       <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
     </div>
     <div class="px-4 sm:px-5 pt-3 shrink-0">
@@ -211,20 +215,20 @@ const customCodePlaceholder = [
       <div data-spanel="display" class="flex flex-col gap-4" hidden>
         <div>
           <div class="setting-row">
-            <div><div class="setting-title" data-i18n="settings.showCards"></div><div class="setting-desc" data-i18n="settings.showCardsDesc"></div></div>
-            <label class="switch"><input type="checkbox" id="s-show-cards" /><span></span></label>
+            <div><div id="s-show-cards-label" class="setting-title" data-i18n="settings.showCards"></div><div id="s-show-cards-desc" class="setting-desc" data-i18n="settings.showCardsDesc"></div></div>
+            <label class="switch"><input type="checkbox" id="s-show-cards" aria-labelledby="s-show-cards-label" aria-describedby="s-show-cards-desc" /><span></span></label>
           </div>
           <div class="setting-row">
-            <div><div class="setting-title" data-i18n="settings.showTags"></div><div class="setting-desc" data-i18n="settings.showTagsDesc"></div></div>
-            <label class="switch"><input type="checkbox" id="s-show-tags" /><span></span></label>
+            <div><div id="s-show-tags-label" class="setting-title" data-i18n="settings.showTags"></div><div id="s-show-tags-desc" class="setting-desc" data-i18n="settings.showTagsDesc"></div></div>
+            <label class="switch"><input type="checkbox" id="s-show-tags" aria-labelledby="s-show-tags-label" aria-describedby="s-show-tags-desc" /><span></span></label>
           </div>
           <div class="setting-row">
-            <div><div class="setting-title" data-i18n="settings.showTraffic"></div><div class="setting-desc" data-i18n="settings.showTrafficDesc"></div></div>
-            <label class="switch"><input type="checkbox" id="s-show-traffic" /><span></span></label>
+            <div><div id="s-show-traffic-label" class="setting-title" data-i18n="settings.showTraffic"></div><div id="s-show-traffic-desc" class="setting-desc" data-i18n="settings.showTrafficDesc"></div></div>
+            <label class="switch"><input type="checkbox" id="s-show-traffic" aria-labelledby="s-show-traffic-label" aria-describedby="s-show-traffic-desc" /><span></span></label>
           </div>
           <div class="setting-row">
-            <div><div class="setting-title" data-i18n="settings.glass"></div><div class="setting-desc" data-i18n="settings.glassDesc"></div></div>
-            <label class="switch"><input type="checkbox" id="s-glass" /><span></span></label>
+            <div><div id="s-glass-label" class="setting-title" data-i18n="settings.glass"></div><div id="s-glass-desc" class="setting-desc" data-i18n="settings.glassDesc"></div></div>
+            <label class="switch"><input type="checkbox" id="s-glass" aria-labelledby="s-glass-label" aria-describedby="s-glass-desc" /><span></span></label>
           </div>
         </div>
         <div>
@@ -237,8 +241,8 @@ const customCodePlaceholder = [
       <!-- Privacy -->
       <div data-spanel="privacy" class="flex flex-col gap-4" hidden>
         <div class="setting-row">
-          <div><div class="setting-title" data-i18n="privacy.enable"></div><div class="setting-desc" data-i18n="privacy.enableDesc"></div></div>
-          <label class="switch"><input type="checkbox" id="s-privacy" /><span></span></label>
+          <div><div id="s-privacy-label" class="setting-title" data-i18n="privacy.enable"></div><div id="s-privacy-desc" class="setting-desc" data-i18n="privacy.enableDesc"></div></div>
+          <label class="switch"><input type="checkbox" id="s-privacy" aria-labelledby="s-privacy-label" aria-describedby="s-privacy-desc" /><span></span></label>
         </div>
         <div class="subcard p-4 flex flex-col gap-3">
           <div>
@@ -297,14 +301,15 @@ const customCodePlaceholder = [
 <!-- Regenerate secret confirm -->
 <div id="regen-modal" class="modal-root" hidden>
   <div class="modal-backdrop"></div>
-  <div class="modal-panel" role="alertdialog" aria-modal="true">
-    <div class="modal-head">
+  <div class="modal-panel" role="alertdialog" aria-modal="true" aria-labelledby="regen-title" aria-describedby="regen-desc">
+    <div class="modal-head sm:items-center">
       <div class="flex items-center gap-3">
         <span class="icon-tile is-warn"><Icon name="alert-triangle" size={17} /></span>
-        <div class="modal-title" data-i18n="settings.regenerateTitle"></div>
+        <div id="regen-title" class="modal-title" data-i18n="settings.regenerateTitle"></div>
       </div>
+      <button type="button" class="icon-btn -mr-1.5 -mt-1 sm:mt-0" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
     </div>
-    <div class="modal-body text-[13px] t-2" data-i18n="settings.regenerateDesc"></div>
+    <div id="regen-desc" class="modal-body text-[13px] t-2" data-i18n="settings.regenerateDesc"></div>
     <div class="modal-foot">
       <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
       <button type="button" id="regen-confirm" class="btn btn-warn" data-i18n="settings.regenerate">Regenerate</button>
@@ -315,32 +320,34 @@ const customCodePlaceholder = [
 <!-- Change password -->
 <div id="password-modal" class="modal-root" hidden>
   <div class="modal-backdrop"></div>
-  <form id="password-form" class="modal-panel" role="dialog" aria-modal="true" novalidate>
-    <div class="modal-head">
-      <div class="modal-title" data-i18n="password.title">Change password</div>
-      <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
-    </div>
-    <div class="modal-body flex flex-col gap-4">
-      <div>
-        <label class="field-label" for="pw-current" data-i18n="password.current"></label>
-        <input id="pw-current" name="current" type="password" class="input" autocomplete="current-password" required data-autofocus />
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="password-title">
+    <form id="password-form" class="modal-form" novalidate>
+      <div class="modal-head">
+        <div id="password-title" class="modal-title" data-i18n="password.title">Change password</div>
+        <button type="button" class="icon-btn -mr-1.5 -mt-1" data-modal-close data-i18n-title="common.close"><Icon name="x" size={18} /></button>
       </div>
-      <div>
-        <label class="field-label" for="pw-new" data-i18n="password.new"></label>
-        <input id="pw-new" name="new" type="password" class="input" autocomplete="new-password" required aria-describedby="pw-new-hint" />
-        <p id="pw-new-hint" class="field-hint" data-i18n="password.minLength"></p>
+      <div class="modal-body flex flex-col gap-4">
+        <div>
+          <label class="field-label" for="pw-current" data-i18n="password.current"></label>
+          <input id="pw-current" name="current" type="password" class="input" autocomplete="current-password" required data-autofocus />
+        </div>
+        <div>
+          <label class="field-label" for="pw-new" data-i18n="password.new"></label>
+          <input id="pw-new" name="new" type="password" class="input" autocomplete="new-password" required aria-describedby="pw-new-hint" />
+          <p id="pw-new-hint" class="field-hint" data-i18n="password.minLength"></p>
+        </div>
+        <div>
+          <label class="field-label" for="pw-confirm" data-i18n="password.confirm"></label>
+          <input id="pw-confirm" name="confirm" type="password" class="input" autocomplete="new-password" required />
+        </div>
+        <p id="password-error" class="field-error" hidden></p>
       </div>
-      <div>
-        <label class="field-label" for="pw-confirm" data-i18n="password.confirm"></label>
-        <input id="pw-confirm" name="confirm" type="password" class="input" autocomplete="new-password" required />
+      <div class="modal-foot">
+        <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-i18n="password.submit">Change password</button>
       </div>
-      <p id="password-error" class="field-error" hidden></p>
-    </div>
-    <div class="modal-foot">
-      <button type="button" class="btn" data-modal-close data-i18n="common.cancel">Cancel</button>
-      <button type="submit" class="btn btn-primary" data-i18n="password.submit">Change password</button>
-    </div>
-  </form>
+    </form>
+  </div>
 </div>
 
 <script>

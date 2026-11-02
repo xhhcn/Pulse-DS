@@ -36,8 +36,10 @@ const D: Record<string, [string, string]> = {
   'common.home': ['Home', '首页'],
   'common.admin': ['Admin', '管理'],
   'common.language': ['Switch to 中文', '切换到 English'],
-  'common.themeDark': ['Switch to dark mode', '切换到深色模式'],
-  'common.themeLight': ['Switch to light mode', '切换到浅色模式'],
+  'theme.title': ['Theme', '主题'],
+  'theme.system': ['System', '跟随系统'],
+  'theme.light': ['Light', '浅色'],
+  'theme.dark': ['Dark', '深色'],
   'common.previous': ['Previous', '上一个'],
   'common.next': ['Next', '下一个'],
   'common.required': ['Required', '必填'],
@@ -478,6 +480,11 @@ export function setLang(lang: Lang): void {
 export function toggleLang(): void {
   setLang(getLang() === 'zh' ? 'en' : 'zh');
 }
+
+// A language picked in another tab of this site shows here too.
+window.addEventListener('storage', (e) => {
+  if (e.key === KEY && (e.newValue === 'zh' || e.newValue === 'en') && e.newValue !== getLang()) setLang(e.newValue);
+});
 
 /** Translate `key`, substituting `{name}` placeholders from `vars`. */
 export function t(key: string, vars?: Record<string, string | number>): string {

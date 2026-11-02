@@ -32,6 +32,8 @@ const firstList = new Promise<void>((resolve) => (firstListDone = resolve));
 let sharedSecret = '';
 
 const modals: Record<string, Modal> = {};
+// Set across the reload that applies saved settings (see saveSettings).
+const SAVED_KEY = 'pulse-settings-saved';
 
 function fail(err: unknown, key: string): void {
   if (err instanceof HttpError && err.status === 401) {
@@ -857,8 +859,14 @@ async function saveSettings(): Promise<void> {
   try {
     if (stab === 'general' || stab === 'display') {
       await sendJSON('POST', '/api/navbar/config', collectNavbar());
-      toast(t('settings.saved'), 'ok');
       modals.settings.close();
+      // The page reloads to take on the new name, look and code, and says
+      // "saved" once it is back: a toast shown now would last 0.3 s.
+      try {
+        sessionStorage.setItem(SAVED_KEY, '1');
+      } catch {
+        toast(t('settings.saved'), 'ok');
+      }
       window.setTimeout(() => window.location.reload(), 300);
       return;
     }
@@ -1198,6 +1206,12 @@ async function boot(): Promise<void> {
   // "Loading…" line that the rows then replace.
   await Promise.race([firstList, new Promise((resolve) => window.setTimeout(resolve, 1000))]);
   revealPage();
+  let saved = false;
+  try {
+    saved = sessionStorage.getItem(SAVED_KEY) === '1';
+    sessionStorage.removeItem(SAVED_KEY);
+  } catch {}
+  if (saved) toast(t('settings.saved'), 'ok');
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

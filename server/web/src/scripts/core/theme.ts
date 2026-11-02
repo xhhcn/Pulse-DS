@@ -1,7 +1,8 @@
 /**
  * Theme (dark / light) management. The inline bootstrap in Base.astro
- * already applied the class before first paint; this module only owns
- * toggling and change notifications.
+ * already applied the class before first paint; this module owns the
+ * changes (the theme menu, the system's theme, another tab) and their
+ * notifications.
  */
 export type Theme = 'dark' | 'light';
 const KEY = 'preferred-theme';
@@ -53,8 +54,7 @@ export function syncThemeColor(): void {
   meta.content = '#' + [0, 1, 2].map((i) => Math.round(top[i] * a + page[i] * (1 - a)).toString(16).padStart(2, '0')).join('');
 }
 
-export function setTheme(theme: Theme): void {
-  try { localStorage.setItem(KEY, theme); } catch {}
+function crossFade(theme: Theme): void {
   const html = document.documentElement;
   const doc: any = document;
   if (typeof doc.startViewTransition === 'function') {
@@ -69,12 +69,38 @@ export function setTheme(theme: Theme): void {
     void html.offsetHeight;
     requestAnimationFrame(() => requestAnimationFrame(() => html.classList.remove('theme-switching')));
   }
+}
+
+/**
+ * Show a theme and tell the page. Picking System while the system's theme is
+ * already on screen repaints nothing, but the menu still moves its tick.
+ */
+function show(theme: Theme): void {
+  if (!document.documentElement.classList.contains(theme)) crossFade(theme);
   window.dispatchEvent(new CustomEvent('pulse:theme', { detail: { theme } }));
   window.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
 }
 
-export function toggleTheme(): void {
-  setTheme(getTheme() === 'dark' ? 'light' : 'dark');
+export function setTheme(theme: Theme): void {
+  try { localStorage.setItem(KEY, theme); } catch {}
+  show(theme);
+}
+
+/** What the theme menu offers: the system's theme (nothing stored), or one kept. */
+export type ThemePref = Theme | 'system';
+
+export function getThemePref(): ThemePref {
+  const stored = storedTheme();
+  return stored === 'dark' || stored === 'light' ? stored : 'system';
+}
+
+export function setThemePref(pref: ThemePref): void {
+  if (pref !== 'system') {
+    setTheme(pref);
+    return;
+  }
+  try { localStorage.removeItem(KEY); } catch {}
+  show(systemTheme());
 }
 
 export function isDark(): boolean {
@@ -85,8 +111,9 @@ export function onThemeChange(fn: (theme: Theme) => void): void {
   window.addEventListener('pulse:theme', (e: any) => fn(e.detail?.theme || getTheme()));
 }
 
-// Until a theme is picked here, the page follows the system's, also when the
-// system changes it while the page is open (an automatic dark mode at dusk).
+// Unless light or dark is picked in the theme menu, the page follows the
+// system's theme, also when the system changes it while the page is open (an
+// automatic dark mode at dusk).
 function storedTheme(): string | null {
   try {
     return localStorage.getItem(KEY);
@@ -106,6 +133,13 @@ try {
     window.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
   });
 } catch {}
+
+// A theme picked in another tab of this site shows here too (System included).
+window.addEventListener('storage', (e) => {
+  if (e.key !== KEY && e.key !== null) return;
+  const stored = storedTheme();
+  show(stored === 'dark' || stored === 'light' ? stored : systemTheme());
+});
 
 // The boot script guessed the top bar's colour before the page existed; now
 // that it does, measure it (the login page has no top bar at all).

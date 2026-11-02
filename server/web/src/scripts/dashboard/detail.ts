@@ -67,6 +67,32 @@ function draw(e: Element | null, html: string): void {
 }
 
 /**
+ * Redraw part of the dialog without taking focus from a keyboard user: the
+ * toggle or wide table that had it gets it back in the new markup, or else
+ * the dialog's body (focus on the page would send ←/→ to the next host and
+ * Tab back to the top).
+ */
+function keepFocus(box: HTMLElement, redraw: () => void, fallback: HTMLElement): void {
+  const a = document.activeElement as HTMLElement | null;
+  if (!a || a === box || !box.contains(a)) {
+    redraw();
+    return;
+  }
+  const sel =
+    a.dataset.sensorToggle !== undefined
+      ? `[data-sensor-toggle="${CSS.escape(a.dataset.sensorToggle)}"]`
+      : a.hasAttribute('data-issues-toggle')
+        ? '[data-issues-toggle]'
+        : a.classList.contains('dtable-scroll')
+          ? '.dtable-scroll'
+          : '';
+  const i = sel ? Array.from(box.querySelectorAll(sel)).indexOf(a) : -1;
+  redraw();
+  const back = i >= 0 ? box.querySelectorAll<HTMLElement>(sel)[i] : undefined;
+  (back && back.tabIndex >= 0 ? back : fallback).focus({ preventScroll: true });
+}
+
+/**
  * Key/value rows: while the same keys are listed, only the values that
  * changed are redrawn, so the live rates do not take the IP rows (and a
  * selection in them) along every few seconds.
@@ -138,6 +164,8 @@ export class DetailDialog {
       if (topModal() !== this.modal || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      // In a table that scrolls sideways (hardware.ts) the arrows scroll it.
+      if ((e.target as HTMLElement).classList?.contains('dtable-scroll')) return;
       if (e.key === 'ArrowLeft') this.step(-1);
       else if (e.key === 'ArrowRight') this.step(1);
     });
@@ -147,15 +175,20 @@ export class DetailDialog {
         const key = sb.dataset.sensorToggle || '';
         if (this.sensorOpen.has(key)) this.sensorOpen.delete(key);
         else this.sensorOpen.add(key);
-        this.q('panel-hardware').innerHTML = renderHardware(this.current, this.sensorOpen);
-        syncScrollHints(this.q('panel-hardware'));
+        const s = this.current;
+        const panel = this.q('panel-hardware');
+        keepFocus(panel, () => {
+          panel.innerHTML = renderHardware(s, this.sensorOpen);
+          syncScrollHints(panel);
+        }, this.q('body'));
         return;
       }
       const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-issues-toggle]');
       if (!btn || !this.current) return;
       this.issuesOpen = !this.issuesOpen;
+      const s = this.current;
       const box = this.q('panel-overview').querySelector<HTMLElement>('[data-o="issues"]');
-      if (box) box.innerHTML = renderIssues(this.current, this.issuesOpen);
+      if (box) keepFocus(box, () => (box.innerHTML = renderIssues(s, this.issuesOpen)), this.q('body'));
     });
     // Wide hardware tables: keep the edge fade in step with the scroll position.
     this.root.addEventListener(
@@ -534,20 +567,22 @@ export class DetailDialog {
     // Until the inventory has arrived the panel says so; "idle" without one
     // means the host no longer has an inventory and gets the usual note.
     const status = s.hasHw && !s.hardware ? this.host.hardwareStatus(s.id) : 'idle';
-    panel.innerHTML =
-      status === 'loading'
-        ? `<div class="subcard p-6 flex items-center justify-center gap-2 text-[13px] t-3"><span class="spinner"></span>${esc(t('detail.hwLoading'))}</div>`
-        : status === 'failed'
-          ? `<div class="subcard p-6 text-center text-[13px] t-3">${esc(t('detail.hwFailed'))}</div>`
-          : renderHardware(s, this.sensorOpen);
-    panel.querySelectorAll<HTMLElement>('.dtable-scroll').forEach((e, i) => {
-      if (scrolled[i]) e.scrollLeft = scrolled[i];
-    });
-    if (this.tab === 'hardware') syncScrollHints(panel);
+    keepFocus(panel, () => {
+      panel.innerHTML =
+        status === 'loading'
+          ? `<div class="subcard p-6 flex items-center justify-center gap-2 text-[13px] t-3"><span class="spinner"></span>${esc(t('detail.hwLoading'))}</div>`
+          : status === 'failed'
+            ? `<div class="subcard p-6 text-center text-[13px] t-3">${esc(t('detail.hwFailed'))}</div>`
+            : renderHardware(s, this.sensorOpen);
+      panel.querySelectorAll<HTMLElement>('.dtable-scroll').forEach((e, i) => {
+        if (scrolled[i]) e.scrollLeft = scrolled[i];
+      });
+      if (this.tab === 'hardware') syncScrollHints(panel);
+    }, this.q('body'));
     this.hwSig = this.hwKey(s);
     const issues = this.q('panel-overview').querySelector<HTMLElement>('[data-o="issues"]');
     if (issues) {
-      issues.innerHTML = renderIssues(s, this.issuesOpen);
+      keepFocus(issues, () => (issues.innerHTML = renderIssues(s, this.issuesOpen)), this.q('body'));
       issues.className = s.issues.length ? 'issues-box mb-4' : '';
     }
     draw(this.q('panel-overview').querySelector('[data-o="system"]'), kvHtml(systemRows(s), s));
@@ -582,7 +617,7 @@ export class DetailDialog {
       <button type="button" class="tab" role="tab" data-tab="tcping" aria-selected="false">${icon('radio', 13)}<span data-i18n="detail.tab.tcping"></span></button>
     </div>
   </div>
-  <div class="modal-body" data-d="body">
+  <div class="modal-body" data-d="body" tabindex="0">
     <div data-d="panel-overview"></div>
     <div data-d="panel-hardware" hidden></div>
     <div data-d="panel-tcping" hidden></div>

@@ -3,7 +3,7 @@ import Icon from './Icon.astro';
 const sorts = ['default', 'name', 'health', 'uptime', 'cpu', 'memory', 'disk', 'os'];
 ---
 
-<section class="mx-auto max-w-7xl px-4 sm:px-6 pt-5 sm:pt-7 pb-2 flex flex-col gap-4 sm:gap-5">
+<section class="mx-auto max-w-7xl page-x pt-5 sm:pt-7 pb-2 flex flex-col gap-4 sm:gap-5">
   <!-- Overview strip -->
   <div id="stats" class="card stat-strip" hidden>
     <button type="button" class="stat" data-filter="all" aria-pressed="true">
@@ -70,7 +70,8 @@ const sorts = ['default', 'name', 'health', 'uptime', 'cpu', 'memory', 'disk', '
         <div class="c-net"><span data-i18n="dash.col.net">Network</span></div>
         <div class="c-os justify-center"><span data-i18n="dash.col.os">OS</span></div>
       </div>
-      <div id="systems-body" role="list">
+      <!-- A list (role set by main.ts) while it lists hosts; empty and error states are not. -->
+      <div id="systems-body">
         <div class="px-5 py-5 flex flex-col gap-4" aria-hidden="true">
           {[0, 1, 2, 3].map((i) => (
             <div class="flex items-center gap-4" style={`opacity:${1 - i * 0.2}`}>

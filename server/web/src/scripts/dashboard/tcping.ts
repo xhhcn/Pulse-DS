@@ -27,7 +27,9 @@ export interface TCPingConfig {
   interval_secs: number;
 }
 
-const PALETTE = ['#22c55e', '#3b82f6', '#a855f7', '#ec4899', '#f97316', '#06b6d4', '#84cc16', '#eab308'];
+// Each target's colour, by its place in the settings: the --series-N tokens
+// (global.css), so a theme switch recolours the chart without a redraw.
+const series = (i: number) => `var(--series-${(i % 8) + 1})`;
 const LOSS_MS = 1000;
 const DAY = 24 * 60 * 60 * 1000;
 const MINUTE = 60 * 1000;
@@ -237,7 +239,7 @@ export class TCPingPanel {
       .map(
         (tg, i) =>
           `<button type="button" class="tp-target" data-target="${attr(tg.address)}" aria-pressed="false" title="${attr(tg.name && tg.name !== tg.address ? `${tg.name} · ${tg.address}` : tg.address)}">
-            <span class="tp-name"><span class="dot" style="background:${PALETTE[i % PALETTE.length]}"></span><span class="truncate min-w-0">${esc(tg.name || tg.address)}</span></span>
+            <span class="tp-name"><span class="dot" style="background:${series(i)}"></span><span class="truncate min-w-0">${esc(tg.name || tg.address)}</span></span>
             <span class="tp-stats"><span><span>${esc(t('tcping.latest'))}</span><b data-tp-latest>—</b></span><span><span>${esc(t('tcping.avg'))}</span><b data-tp-avg>—</b></span><span><span>${esc(t('tcping.lossShort'))}</span><b data-tp-loss>—</b></span></span>
           </button>`,
       )
@@ -476,7 +478,6 @@ export class TCPingPanel {
     parts.push('</g><g class="tp-lines">');
     // One path per target; timeouts, missing cycles and gaps in time break the line.
     cfg.targets.forEach((tg, i) => {
-      const color = PALETTE[i % PALETTE.length];
       const cls = !this.active ? 'tp-line' : tg.address === this.active ? 'tp-line is-active' : 'tp-line is-dim';
       let d = '';
       let run = 0;
@@ -484,7 +485,7 @@ export class TCPingPanel {
       const dots: string[] = [];
       const flush = () => {
         // An isolated sample between two gaps has no segment: mark it with a dot.
-        if (run === 1) dots.push(`<circle class="tp-dot" cx="${lastPt.split(',')[0]}" cy="${lastPt.split(',')[1]}" r="1.75" fill="${color}"></circle>`);
+        if (run === 1) dots.push(`<circle class="tp-dot" cx="${lastPt.split(',')[0]}" cy="${lastPt.split(',')[1]}" r="1.75"></circle>`);
         run = 0;
       };
       clusters.forEach((c, k) => {
@@ -500,13 +501,13 @@ export class TCPingPanel {
         run++;
       });
       flush();
-      parts.push(`<g class="${cls}"><path d="${d}" stroke="${color}"></path>${dots.join('')}</g>`);
+      parts.push(`<g class="${cls}" style="--c:${series(i)}"><path d="${d}"></path>${dots.join('')}</g>`);
     });
     parts.push('</g>');
     // Hover layer: crosshair + one marker per target (positioned on hover).
     parts.push(`<g class="tp-hover" data-tp="hover" style="display:none"><line class="tp-cross" x1="0" x2="0" y1="${top}" y2="${bottom}"></line>`);
     cfg.targets.forEach((tg, i) => {
-      parts.push(`<circle class="tp-marker" data-marker="${attr(tg.address)}" r="3" stroke="${PALETTE[i % PALETTE.length]}" style="display:none"></circle>`);
+      parts.push(`<circle class="tp-marker" data-marker="${attr(tg.address)}" r="3" style="--c:${series(i)};display:none"></circle>`);
     });
     parts.push('</g>');
 
@@ -587,7 +588,7 @@ export class TCPingPanel {
       if (!shown) return;
       const value = v == null ? esc(t('tcping.timeout')) : `${v.toFixed(2)} ms`;
       rows.push(
-        `<div class="tp-tip-row${v == null ? ' is-timeout' : ''}"><span class="dot" style="background:${PALETTE[i % PALETTE.length]}"></span><span>${esc(tg.name || tg.address)}</span><b>${value}</b></div>`,
+        `<div class="tp-tip-row${v == null ? ' is-timeout' : ''}"><span class="dot" style="background:${series(i)}"></span><span>${esc(tg.name || tg.address)}</span><b>${value}</b></div>`,
       );
     });
     tip.innerHTML = `<div class="tp-tip-title">${esc(dateTime(new Date(c.x)))}</div>${rows.join('')}`;
